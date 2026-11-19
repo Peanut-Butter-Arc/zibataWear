@@ -234,7 +234,8 @@ export const VERIFIED_UNI_DOMAINS = [
   "unam.mx",
 ] as const;
 
-export const PLATFORM_FEE_RATE = 0.05;
+export const PLATFORM_FEE_RATE = 0.07;
+export const PLATFORM_FEE_PERCENT = 7;
 
 export function isUniversityEmail(email: string): boolean {
   const domain = email.trim().toLowerCase().split("@")[1] ?? "";

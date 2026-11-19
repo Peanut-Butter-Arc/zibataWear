@@ -20,6 +20,7 @@ export function ListingCard({ listing }: ListingCardProps) {
   const coverImage =
     listing.images?.[0] ||
     "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&w=900&q=80";
+  const hoverImage = listing.images?.[1] ?? null;
 
   const conditionLabel = CONDITION_MAP[listing.condition]?.label ?? listing.condition;
   const canRent =
@@ -28,6 +29,17 @@ export function ListingCard({ listing }: ListingCardProps) {
   const canBuy =
     (listing.listing_mode === "buy" || listing.listing_mode === "both") &&
     listing.sale_price_mxn;
+  const discountPct =
+    canBuy &&
+    listing.original_price_mxn &&
+    listing.sale_price_mxn &&
+    listing.original_price_mxn > listing.sale_price_mxn
+      ? Math.round(
+          ((listing.original_price_mxn - listing.sale_price_mxn) /
+            listing.original_price_mxn) *
+            100
+        )
+      : null;
 
   const handleFavoriteClick = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -51,8 +63,20 @@ export function ListingCard({ listing }: ListingCardProps) {
           alt={listing.title}
           fill
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          className="object-cover transition duration-500 group-hover:scale-105"
+          className={cn(
+            "object-cover transition duration-500",
+            hoverImage ? "group-hover:opacity-0" : "group-hover:scale-105"
+          )}
         />
+        {hoverImage && (
+          <Image
+            src={hoverImage}
+            alt={`${listing.title} vista 2`}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            className="object-cover opacity-0 transition duration-500 group-hover:scale-105 group-hover:opacity-100"
+          />
+        )}
 
         <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
@@ -68,6 +92,11 @@ export function ListingCard({ listing }: ListingCardProps) {
             ) : (
               <span className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-medium text-zinc-900 backdrop-blur-md">
                 Compra
+              </span>
+            )}
+            {discountPct && discountPct >= 15 && (
+              <span className="tabular-nums rounded-full bg-emerald-500/95 px-2 py-1 text-[10px] font-bold text-zinc-950 backdrop-blur-md">
+                -{discountPct}%
               </span>
             )}
           </div>

@@ -43,6 +43,7 @@ export function MarketplaceExplorer({ initialListings }: MarketplaceExplorerProp
   const [category, setCategory] = useState<string>("all");
   const [zone, setZone] = useState<string>("all");
   const [size, setSize] = useState<string>("all");
+  const [priceRange, setPriceRange] = useState<"all" | "under_800" | "800_2000" | "over_2000">("all");
   const [sort, setSort] = useState<"recent" | "price_asc" | "price_desc">("recent");
   const [showFilters, setShowFilters] = useState(false);
 
@@ -108,9 +109,20 @@ export function MarketplaceExplorer({ initialListings }: MarketplaceExplorerProp
     setCategory("all");
     setZone("all");
     setSize("all");
+    setPriceRange("all");
     setSort("recent");
     handleModeChange("all");
   };
+
+  const visibleListings = useMemo(() => {
+    if (priceRange === "all") return listings;
+    return listings.filter((item) => {
+      const price = item.sale_price_mxn ?? item.rent_price_per_day_mxn ?? 0;
+      if (priceRange === "under_800") return price < 800;
+      if (priceRange === "800_2000") return price >= 800 && price <= 2000;
+      return price > 2000;
+    });
+  }, [listings, priceRange]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pt-10">
@@ -162,16 +174,16 @@ export function MarketplaceExplorer({ initialListings }: MarketplaceExplorerProp
 
             <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-zinc-600">
               <span className="inline-flex items-center gap-1.5">
-                <BadgeCheck className="h-4 w-4 text-emerald-600" />
-                Acceso con código de 6 dígitos
+                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                Custodia con código de 6 dígitos
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <MapPin className="h-4 w-4 text-zinc-700" />
-                Entregas en Campus y Paseo Zibatá
+                Entregas seguras en Campus y Zibatá
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                Pasarela Stripe protegida
+                <BadgeCheck className="h-4 w-4 text-emerald-600" />
+                Comisión transparente del 7%
               </span>
             </div>
           </div>
@@ -208,7 +220,7 @@ export function MarketplaceExplorer({ initialListings }: MarketplaceExplorerProp
                 </p>
               </div>
               <span className="tabular-nums shrink-0 rounded-full bg-zinc-950 px-3 py-1 font-mono text-xs font-medium text-white">
-                {listings.length} prendas
+                {visibleListings.length} prendas
               </span>
             </div>
           </div>
@@ -242,7 +254,7 @@ export function MarketplaceExplorer({ initialListings }: MarketplaceExplorerProp
           </div>
 
           <div className="flex items-center gap-2">
-            {hasActiveFilters && (
+            {(hasActiveFilters || priceRange !== "all") && (
               <button
                 type="button"
                 onClick={resetFilters}
@@ -300,7 +312,7 @@ export function MarketplaceExplorer({ initialListings }: MarketplaceExplorerProp
         </div>
 
         {showFilters && (
-          <div className="grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:grid-cols-3">
+          <div className="grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-zinc-500">
                 Punto de entrega en Zibatá
@@ -339,6 +351,26 @@ export function MarketplaceExplorer({ initialListings }: MarketplaceExplorerProp
 
             <div>
               <label className="mb-1.5 block text-xs font-medium text-zinc-500">
+                Rango de precio (MXN)
+              </label>
+              <select
+                value={priceRange}
+                onChange={(e) =>
+                  setPriceRange(
+                    e.target.value as "all" | "under_800" | "800_2000" | "over_2000"
+                  )
+                }
+                className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none focus:border-zinc-950"
+              >
+                <option value="all">Cualquier precio</option>
+                <option value="under_800">Menos de $800</option>
+                <option value="800_2000">$800 – $2,000</option>
+                <option value="over_2000">Más de $2,000</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-zinc-500">
                 Ordenar por
               </label>
               <select
@@ -353,6 +385,55 @@ export function MarketplaceExplorer({ initialListings }: MarketplaceExplorerProp
                 <option value="price_desc">Mayor precio primero</option>
               </select>
             </div>
+          </div>
+        )}
+
+        {(category !== "all" || zone !== "all" || size !== "all" || priceRange !== "all") && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {category !== "all" && (
+              <button
+                type="button"
+                onClick={() => setCategory("all")}
+                className="inline-flex items-center gap-1 rounded-full bg-zinc-950 px-3 py-1 font-medium text-white"
+              >
+                {CATEGORIES.find((c) => c.id === category)?.shortLabel ?? category}
+                <X className="h-3 w-3" />
+              </button>
+            )}
+            {zone !== "all" && (
+              <button
+                type="button"
+                onClick={() => setZone("all")}
+                className="inline-flex items-center gap-1 rounded-full bg-zinc-950 px-3 py-1 font-medium text-white"
+              >
+                {zone}
+                <X className="h-3 w-3" />
+              </button>
+            )}
+            {size !== "all" && (
+              <button
+                type="button"
+                onClick={() => setSize("all")}
+                className="inline-flex items-center gap-1 rounded-full bg-zinc-950 px-3 py-1 font-medium text-white"
+              >
+                Talla {size}
+                <X className="h-3 w-3" />
+              </button>
+            )}
+            {priceRange !== "all" && (
+              <button
+                type="button"
+                onClick={() => setPriceRange("all")}
+                className="inline-flex items-center gap-1 rounded-full bg-zinc-950 px-3 py-1 font-medium text-white"
+              >
+                {priceRange === "under_800"
+                  ? "< $800"
+                  : priceRange === "800_2000"
+                    ? "$800 – $2,000"
+                    : "$2,000+"}
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </div>
         )}
       </section>
@@ -375,7 +456,7 @@ export function MarketplaceExplorer({ initialListings }: MarketplaceExplorerProp
               </div>
             ))}
           </div>
-        ) : listings.length === 0 ? (
+        ) : visibleListings.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
             <p className="text-base font-semibold text-zinc-950">
               No encontramos prendas con esos filtros
@@ -402,7 +483,7 @@ export function MarketplaceExplorer({ initialListings }: MarketplaceExplorerProp
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
-            {listings.map((listing) => (
+            {visibleListings.map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
           </div>

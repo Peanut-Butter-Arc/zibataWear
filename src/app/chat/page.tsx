@@ -3,17 +3,24 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BadgeCheck,
+  ChevronDown,
   ExternalLink,
   MapPin,
   MessageCircle,
   Send,
+  ShieldCheck,
 } from "lucide-react";
 import { formatMxn } from "@/core/constants/zibata";
-import type { ConversationWithDetails, Message } from "@/core/types/domain";
+import type {
+  ConversationWithDetails,
+  Message,
+  OrderWithDetails,
+} from "@/core/types/domain";
+import { OrderEscrowCard } from "@/components/escrow/OrderEscrowCard";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { createClient } from "@/lib/supabase/client";
@@ -38,6 +45,8 @@ function ChatContent() {
   const [conversations, setConversations] = useState<ConversationWithDetails[]>([]);
   const [manualActiveId, setManualActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [activeOrder, setActiveOrder] = useState<OrderWithDetails | null>(null);
+  const [escrowExpanded, setEscrowExpanded] = useState(true);
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [loadedRoomId, setLoadedRoomId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -141,6 +150,51 @@ function ChatContent() {
     () => conversations.find((c) => c.id === activeId) ?? null,
     [conversations, activeId]
   );
+
+  const reloadActiveOrder = useCallback(async () => {
+    const listingId = activeConversation?.listing_id;
+    if (!listingId || !user) {
+      setActiveOrder(null);
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/v1/orders?listingId=${encodeURIComponent(listingId)}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setActiveOrder(data.order ?? null);
+      }
+    } catch {
+      // Ignore transient order check error
+    }
+  }, [activeConversation?.listing_id, user]);
+
+  useEffect(() => {
+    let active = true;
+    const listingId = activeConversation?.listing_id;
+    if (!listingId || !user) {
+      Promise.resolve().then(() => {
+        if (active) setActiveOrder(null);
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    fetch(`/api/v1/orders?listingId=${encodeURIComponent(listingId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active) setActiveOrder(data?.order ?? null);
+      })
+      .catch(() => {
+        if (active) setActiveOrder(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeConversation?.listing_id, user]);
 
   const sendMessage = async (textToSend?: string) => {
     const body = (textToSend ?? draft).trim();
@@ -380,6 +434,41 @@ function ChatContent() {
                   </Link>
                 )}
               </div>
+
+              {activeOrder &&
+                (activeOrder.payout_status === "held_in_escrow" ||
+                  activeOrder.status === "active_rental") && (
+                  <div className="border-b border-emerald-200/80 bg-emerald-50/40 px-4 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setEscrowExpanded((prev) => !prev)}
+                      className="flex w-full items-center justify-between gap-2 text-left text-xs font-semibold text-emerald-900"
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                        {activeOrder.payout_status === "held_in_escrow"
+                          ? "Pago en custodia activo · Confirma código de 6 dígitos en la entrega"
+                          : "Renta activa · Código de devolución disponible"}
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 text-emerald-700 transition",
+                          escrowExpanded ? "rotate-180" : ""
+                        )}
+                      />
+                    </button>
+                    {escrowExpanded && (
+                      <div className="mt-2.5">
+                        <OrderEscrowCard
+                          order={activeOrder}
+                          role={activeOrder.buyer_id === user?.id ? "buyer" : "seller"}
+                          compact
+                          onUpdated={reloadActiveOrder}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
               <div className="flex-1 space-y-3 overflow-y-auto bg-[#fafafa] p-4">
                 {loadingMessages ? (

@@ -3,38 +3,53 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
   BadgeCheck,
+  Building2,
+  ExternalLink,
   Heart,
+  Landmark,
   LogOut,
-  MapPin,
   PauseCircle,
   PlayCircle,
   Plus,
+  ShieldCheck,
   ShoppingBag,
   Sparkles,
   Trash2,
   User as UserIcon,
+  Wallet,
 } from "lucide-react";
-import { formatMxn, ZIBATA_MEETUP_ZONES } from "@/core/constants/zibata";
-import type { ListingWithSeller, OrderWithDetails, Profile } from "@/core/types/domain";
+import {
+  formatMxn,
+  PLATFORM_FEE_PERCENT,
+  ZIBATA_MEETUP_ZONES,
+} from "@/core/constants/zibata";
+import type {
+  ListingWithSeller,
+  OrderWithDetails,
+  Profile,
+  WalletTransaction,
+} from "@/core/types/domain";
+import { OrderEscrowCard } from "@/components/escrow/OrderEscrowCard";
 import { ListingCard } from "@/components/marketplace/ListingCard";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { cn } from "@/lib/utils";
 
-type TabId = "perfil" | "prendas" | "ordenes" | "favoritos";
+type TabId = "perfil" | "prendas" | "ordenes" | "billetera" | "favoritos";
 
-const STATUS_BADGE: Record<string, { label: string; tone: string }> = {
-  pending: { label: "Pendiente", tone: "bg-amber-50 text-amber-700" },
-  paid: { label: "Pagado con Stripe", tone: "bg-emerald-50 text-emerald-700" },
-  demo_paid: { label: "Pago Demo Confirmado", tone: "bg-emerald-50 text-emerald-700" },
-  active_rental: { label: "Renta Activa", tone: "bg-blue-50 text-blue-700" },
-  completed: { label: "Completado", tone: "bg-zinc-100 text-zinc-700" },
-  cancelled: { label: "Cancelado", tone: "bg-rose-50 text-rose-700" },
-  refunded: { label: "Reembolsado", tone: "bg-zinc-100 text-zinc-700" },
-};
+interface WalletSnapshot {
+  balanceMxn: number;
+  pendingMxn: number;
+  stripeConnectAccountId: string | null;
+  stripeConnectOnboarded: boolean;
+  payoutClabe: string | null;
+  payoutBank: string | null;
+}
 
 function ProfileEditorForm({
   profile,
@@ -189,12 +204,146 @@ function ProfileEditorForm({
   );
 }
 
+function WalletWithdrawalForm({
+  wallet,
+  onWithdrawn,
+}: {
+  wallet: WalletSnapshot;
+  onWithdrawn: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [amount, setAmount] = useState(() =>
+    wallet.balanceMxn >= 50 ? String(wallet.balanceMxn) : ""
+  );
+  const [clabe, setClabe] = useState(wallet.payoutClabe ?? "");
+  const [bank, setBank] = useState(wallet.payoutBank ?? "");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const num = Math.floor(Number(amount));
+    if (!Number.isFinite(num) || num < 50) {
+      showToast("El retiro mínimo es de $50 MXN.", "error");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/v1/wallet/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amountMxn: num,
+          clabe: clabe.replace(/\D/g, ""),
+          bank: bank.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error ?? "No se pudo procesar el retiro.", "error");
+        return;
+      }
+      showToast("Solicitud de retiro registrada correctamente", "success");
+      setAmount("");
+      await onWithdrawn();
+    } catch {
+      showToast("Error de red al solicitar retiro.", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleWithdraw}
+      className="space-y-4 rounded-3xl border border-zinc-200 bg-white p-6"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Landmark className="h-5 w-5 text-zinc-900" />
+          <h3 className="text-base font-semibold text-zinc-950">
+            Retiro bancario por CLABE (SPEI)
+          </h3>
+        </div>
+        <span className="tabular-nums text-xs font-medium text-zinc-500">
+          Disponible: {formatMxn(wallet.balanceMxn)}
+        </span>
+      </div>
+
+      <p className="text-xs leading-relaxed text-zinc-500">
+        Si prefieres no usar Stripe Connect Express, solicita transferencia SPEI directo a tu cuenta mexicana con tu CLABE interbancaria de 18 dígitos.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-zinc-700">
+            Monto a retirar (MXN)
+          </label>
+          <input
+            type="number"
+            min={50}
+            max={Math.max(50, wallet.balanceMxn)}
+            required
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="500"
+            className="tabular-nums h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm font-semibold outline-none focus:border-zinc-950 focus:bg-white"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-zinc-700">
+            Banco
+          </label>
+          <input
+            type="text"
+            required
+            value={bank}
+            onChange={(e) => setBank(e.target.value)}
+            placeholder="BBVA, Nu, Santander..."
+            className="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm outline-none focus:border-zinc-950 focus:bg-white"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-zinc-700">
+            CLABE (18 dígitos)
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            required
+            maxLength={18}
+            value={clabe}
+            onChange={(e) => setClabe(e.target.value.replace(/\D/g, "").slice(0, 18))}
+            placeholder="012180001234567890"
+            className="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 font-mono text-xs outline-none focus:border-zinc-950 focus:bg-white"
+          />
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={submitting || wallet.balanceMxn < 50}
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-5 text-xs font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-40"
+      >
+        <Building2 className="h-4 w-4" />
+        {submitting
+          ? "Enviando solicitud..."
+          : wallet.balanceMxn < 50
+            ? "Mínimo $50 MXN disponibles para retirar"
+            : "Solicitar transferencia SPEI"}
+      </button>
+    </form>
+  );
+}
+
 function CuentaContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const paramTab = searchParams.get("tab") as TabId | null;
+  const connectParam = searchParams.get("connect");
   const tab: TabId =
-    paramTab && ["perfil", "prendas", "ordenes", "favoritos"].includes(paramTab)
+    paramTab &&
+    ["perfil", "prendas", "ordenes", "billetera", "favoritos"].includes(paramTab)
       ? paramTab
       : "perfil";
 
@@ -205,47 +354,91 @@ function CuentaContent() {
   const [purchases, setPurchases] = useState<OrderWithDetails[]>([]);
   const [sales, setSales] = useState<OrderWithDetails[]>([]);
   const [favListings, setFavListings] = useState<ListingWithSeller[]>([]);
+  const [wallet, setWallet] = useState<WalletSnapshot>({
+    balanceMxn: 0,
+    pendingMxn: 0,
+    stripeConnectAccountId: null,
+    stripeConnectOnboarded: false,
+    payoutClabe: null,
+    payoutBank: null,
+  });
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  const [startingConnect, setStartingConnect] = useState(false);
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
 
   const loadingData = Boolean(user && loadedUserId !== user.id);
+
+  const fetchAccountData = useCallback(async () => {
+    if (!user) return;
+    const [listingsRes, ordersRes, favsRes, walletRes] = await Promise.all([
+      fetch("/api/v1/listings?mine=true"),
+      fetch("/api/v1/orders"),
+      fetch("/api/v1/favorites"),
+      fetch("/api/v1/wallet"),
+    ]);
+
+    if (listingsRes.ok) {
+      const d = await listingsRes.json();
+      setMyListings(d.listings ?? []);
+    }
+    if (ordersRes.ok) {
+      const d = await ordersRes.json();
+      setPurchases(d.purchases ?? []);
+      setSales(d.sales ?? []);
+    }
+    if (favsRes.ok) {
+      const d = await favsRes.json();
+      setFavListings(d.listings ?? []);
+    }
+    if (walletRes.ok) {
+      const d = await walletRes.json();
+      if (d.wallet) setWallet(d.wallet);
+      setTransactions(d.transactions ?? []);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
     const currentUserId = user.id;
     let active = true;
 
-    async function fetchAccountData() {
+    async function initLoad() {
       try {
-        const [listingsRes, ordersRes, favsRes] = await Promise.all([
-          fetch("/api/v1/listings?mine=true"),
-          fetch("/api/v1/orders"),
-          fetch("/api/v1/favorites"),
-        ]);
-        if (!active) return;
-
-        if (listingsRes.ok) {
-          const d = await listingsRes.json();
-          setMyListings(d.listings ?? []);
+        if (connectParam === "return") {
+          await fetch("/api/v1/connect/status");
         }
-        if (ordersRes.ok) {
-          const d = await ordersRes.json();
-          setPurchases(d.purchases ?? []);
-          setSales(d.sales ?? []);
-        }
-        if (favsRes.ok) {
-          const d = await favsRes.json();
-          setFavListings(d.listings ?? []);
-        }
+        await fetchAccountData();
       } finally {
         if (active) setLoadedUserId(currentUserId);
       }
     }
 
-    fetchAccountData();
+    initLoad();
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [user, connectParam, fetchAccountData]);
+
+  const handleReloadAll = async () => {
+    await Promise.all([fetchAccountData(), refreshProfile()]);
+  };
+
+  const handleStripeConnectOnboard = async () => {
+    setStartingConnect(true);
+    try {
+      const res = await fetch("/api/v1/connect/onboard", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        showToast(data.error ?? "No se pudo conectar Stripe Express.", "error");
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      showToast("Error conectando con Stripe Express.", "error");
+    } finally {
+      setStartingConnect(false);
+    }
+  };
 
   const handleTogglePause = async (listing: ListingWithSeller) => {
     const nextStatus = listing.status === "paused" ? "active" : "paused";
@@ -297,7 +490,7 @@ function CuentaContent() {
           </h1>
           <p className="mt-2 text-sm text-zinc-600">
             Ingresa con tu código de 6 dígitos para administrar tu perfil, tus
-            prendas publicadas, compras, rentas y favoritos.
+            prendas publicadas, pagos en custodia y tu billetera.
           </p>
           <Link
             href="/auth?next=/cuenta"
@@ -340,7 +533,15 @@ function CuentaContent() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => router.replace("/cuenta?tab=billetera", { scroll: false })}
+            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
+          >
+            <Wallet className="h-3.5 w-3.5 text-emerald-600" />
+            <span className="tabular-nums">{formatMxn(wallet.balanceMxn)}</span>
+          </button>
           <Link
             href="/publicar"
             className="inline-flex items-center gap-1.5 rounded-full bg-zinc-950 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-800"
@@ -372,6 +573,11 @@ function CuentaContent() {
             id: "ordenes",
             label: `Compras y Rentas (${purchases.length + sales.length})`,
             icon: ShoppingBag,
+          },
+          {
+            id: "billetera",
+            label: `Billetera (${formatMxn(wallet.balanceMxn)})`,
+            icon: Wallet,
           },
           {
             id: "favoritos",
@@ -519,117 +725,206 @@ function CuentaContent() {
         {tab === "ordenes" && (
           <div className="grid gap-6 lg:grid-cols-2">
             <section className="space-y-3 rounded-3xl border border-zinc-200 bg-white p-6">
-              <h2 className="text-base font-semibold text-zinc-950">
-                Mis compras y rentas ({purchases.length})
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold text-zinc-950">
+                  Mis compras y rentas ({purchases.length})
+                </h2>
+                <span className="text-[11px] font-medium text-zinc-500">
+                  Tu código protege cada entrega
+                </span>
+              </div>
               {purchases.length === 0 ? (
                 <p className="text-sm text-zinc-500">
                   Todavía no has comprado o rentado ninguna prenda.
                 </p>
               ) : (
-                purchases.map((order) => {
-                  const badge = STATUS_BADGE[order.status] ?? {
-                    label: order.status,
-                    tone: "bg-zinc-100 text-zinc-700",
-                  };
-                  return (
-                    <div
-                      key={order.id}
-                      className="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-4"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span
-                            className={cn(
-                              "inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-                              badge.tone
-                            )}
-                          >
-                            {badge.label}
-                          </span>
-                          <p className="mt-1.5 text-sm font-semibold text-zinc-950">
-                            {order.listing?.title ?? "Prenda"}
-                          </p>
-                          <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-500">
-                            <MapPin className="h-3 w-3 text-emerald-600" />
-                            {order.meetup_zone}
-                            {order.order_type === "rent" && order.rental_start_date
-                              ? ` · ${order.rental_start_date} a ${order.rental_end_date}`
-                              : ""}
-                          </p>
-                        </div>
-                        <span className="tabular-nums text-sm font-bold text-zinc-950">
-                          {formatMxn(order.total_mxn)}
-                        </span>
-                      </div>
-
-                      <div className="mt-3 flex gap-2">
-                        {order.status === "pending" &&
-                          order.payment_provider === "stripe_sandbox_demo" && (
-                            <Link
-                              href={`/pago/sandbox?orderId=${order.id}`}
-                              className="rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-white"
-                            >
-                              Completar pago demo
-                            </Link>
-                          )}
-                        <Link
-                          href={`/pago/exito?orderId=${order.id}`}
-                          className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700"
-                        >
-                          Ver recibo
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })
+                purchases.map((order) => (
+                  <OrderEscrowCard
+                    key={order.id}
+                    order={order}
+                    role="buyer"
+                    onUpdated={handleReloadAll}
+                  />
+                ))
               )}
             </section>
 
             <section className="space-y-3 rounded-3xl border border-zinc-200 bg-white p-6">
-              <h2 className="text-base font-semibold text-zinc-950">
-                Mis ventas y rentas recibidas ({sales.length})
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold text-zinc-950">
+                  Mis ventas y rentas recibidas ({sales.length})
+                </h2>
+                <span className="text-[11px] font-medium text-emerald-700">
+                  Ingresa el PIN para cobrar
+                </span>
+              </div>
               {sales.length === 0 ? (
                 <p className="text-sm text-zinc-500">
                   Cuando otro estudiante compre o rente tu ropa aparecerá aquí.
                 </p>
               ) : (
-                sales.map((order) => {
-                  const badge = STATUS_BADGE[order.status] ?? {
-                    label: order.status,
-                    tone: "bg-zinc-100 text-zinc-700",
-                  };
-                  return (
-                    <div
-                      key={order.id}
-                      className="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-4"
+                sales.map((order) => (
+                  <OrderEscrowCard
+                    key={order.id}
+                    order={order}
+                    role="seller"
+                    onUpdated={handleReloadAll}
+                  />
+                ))
+              )}
+            </section>
+          </div>
+        )}
+
+        {tab === "billetera" && (
+          <div className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-12">
+              {/* Obsidian Balance Card */}
+              <div className="rounded-3xl bg-zinc-950 p-6 text-white shadow-lg sm:p-8 lg:col-span-7">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-emerald-300">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Billetera y custodia zibataWear
+                  </span>
+                  <span className="font-mono text-xs text-zinc-400">
+                    Comisión plataforma: {PLATFORM_FEE_PERCENT}%
+                  </span>
+                </div>
+
+                <div className="mt-6 grid gap-6 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-zinc-400">
+                      Saldo disponible para retirar
+                    </p>
+                    <p className="tabular-nums mt-1 text-4xl font-bold tracking-tight text-white">
+                      {formatMxn(wallet.balanceMxn)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs text-zinc-400">
+                      En custodia (esperando código de entrega)
+                    </p>
+                    <p className="tabular-nums mt-1 text-2xl font-bold text-amber-300">
+                      {formatMxn(wallet.pendingMxn)}
+                    </p>
+                  </div>
+                </div>
+
+                <p className="mt-5 border-t border-white/10 pt-4 text-xs leading-relaxed text-zinc-400">
+                  Recibes el 100% del precio de tu prenda justo cuando el comprador te dé su código de 6 dígitos en Zibatá (el comprador cubre la comisión de {PLATFORM_FEE_PERCENT}% al pagar).
+                </p>
+              </div>
+
+              {/* Stripe Connect Express Setup Card */}
+              <div className="flex flex-col justify-between rounded-3xl border border-zinc-200 bg-white p-6 lg:col-span-5">
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-base font-semibold text-zinc-950">
+                      Depósitos directos con Stripe Connect
+                    </h3>
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                        wallet.stripeConnectOnboarded
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-zinc-100 text-zinc-600"
+                      )}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
+                      {wallet.stripeConnectOnboarded ? "Conectado" : "Pendiente"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-zinc-600">
+                    Conecta tu cuenta bancaria en México mediante Stripe Connect Express para que cada vez que valides un código de entrega los fondos se transfieran automáticamente.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={startingConnect}
+                  onClick={handleStripeConnectOnboard}
+                  className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-4 text-xs font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60"
+                >
+                  <ExternalLink className="h-4 w-4 text-emerald-400" />
+                  {startingConnect
+                    ? "Abriendo Stripe Express..."
+                    : wallet.stripeConnectOnboarded
+                      ? "Administrar cuenta Stripe Express"
+                      : "Configurar depósitos con Stripe"}
+                </button>
+              </div>
+            </div>
+
+            <WalletWithdrawalForm
+              key={`${wallet.balanceMxn}-${wallet.payoutClabe ?? ""}-${wallet.payoutBank ?? ""}`}
+              wallet={wallet}
+              onWithdrawn={handleReloadAll}
+            />
+
+            {/* Ledger History */}
+            <section className="rounded-3xl border border-zinc-200 bg-white p-6">
+              <h3 className="text-base font-semibold text-zinc-950">
+                Historial de movimientos ({transactions.length})
+              </h3>
+              {transactions.length === 0 ? (
+                <p className="mt-2 text-sm text-zinc-500">
+                  Aquí verás cada retención en custodia, liberación por código y retiro bancario.
+                </p>
+              ) : (
+                <div className="mt-4 divide-y divide-zinc-100">
+                  {transactions.map((tx) => {
+                    const isPositive = tx.amount_mxn >= 0;
+                    return (
+                      <div
+                        key={tx.id}
+                        className="flex items-center justify-between gap-4 py-3 text-sm"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
                           <span
                             className={cn(
-                              "inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-                              badge.tone
+                              "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                              tx.status === "pending"
+                                ? "bg-amber-50 text-amber-600"
+                                : isPositive
+                                  ? "bg-emerald-50 text-emerald-600"
+                                  : "bg-zinc-100 text-zinc-700"
                             )}
                           >
-                            {badge.label}
+                            {isPositive ? (
+                              <ArrowDownLeft className="h-4 w-4" />
+                            ) : (
+                              <ArrowUpRight className="h-4 w-4" />
+                            )}
                           </span>
-                          <p className="mt-1.5 text-sm font-semibold text-zinc-950">
-                            {order.listing?.title ?? "Prenda"}
-                          </p>
-                          <p className="mt-0.5 text-xs text-zinc-500">
-                            Comprador: {order.buyer?.full_name || "Estudiante Zibatá"} ·{" "}
-                            {order.meetup_zone}
-                          </p>
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-zinc-950">
+                              {tx.description}
+                            </p>
+                            <p className="text-xs text-zinc-400">
+                              {new Date(tx.created_at).toLocaleString("es-MX", {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              })}{" "}
+                              · {tx.status === "pending" ? "Pendiente" : "Completado"}
+                            </p>
+                          </div>
                         </div>
-                        <span className="tabular-nums text-sm font-bold text-emerald-700">
-                          +{formatMxn(order.subtotal_mxn)}
+                        <span
+                          className={cn(
+                            "tabular-nums shrink-0 font-mono text-sm font-bold",
+                            tx.status === "pending"
+                              ? "text-amber-600"
+                              : isPositive
+                                ? "text-emerald-700"
+                                : "text-zinc-900"
+                          )}
+                        >
+                          {isPositive ? "+" : ""}
+                          {formatMxn(tx.amount_mxn)}
                         </span>
                       </div>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               )}
             </section>
           </div>

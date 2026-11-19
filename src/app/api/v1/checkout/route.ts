@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { PLATFORM_FEE_RATE } from "@/core/constants/zibata";
+import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_RATE } from "@/core/constants/zibata";
 import { checkoutRequestSchema } from "@/core/schemas/validation";
 import { getStripeClient } from "@/lib/stripe/server";
 import {
@@ -184,8 +184,8 @@ export async function POST(request: Request) {
           price_data: {
             currency: "mxn",
             product_data: {
-              name: "Protección Zibatá (5%)",
-              description: "Resguardo del pago hasta tu entrega en campus",
+              name: `Comisión y Protección zibataWear (${PLATFORM_FEE_PERCENT}%)`,
+              description: "Pago en custodia — se libera al vendedor al confirmar el código de entrega",
             },
             unit_amount: Math.round(serviceFeeMxn * 100),
           },
@@ -197,6 +197,9 @@ export async function POST(request: Request) {
         mode: "payment",
         customer_email: user.email ?? undefined,
         line_items: lineItems,
+        payment_intent_data: {
+          transfer_group: orderId,
+        },
         metadata: {
           order_id: orderId,
           listing_id: listing.id,
@@ -235,6 +238,9 @@ export async function POST(request: Request) {
       deposit_mxn: depositMxn,
       service_fee_mxn: serviceFeeMxn,
       total_mxn: totalMxn,
+      platform_fee_rate: PLATFORM_FEE_RATE,
+      seller_payout_mxn: subtotalMxn,
+      payout_status: "unpaid",
       meetup_zone: chosenMeetupZone,
       stripe_session_id: stripeSessionId,
       payment_provider: provider,

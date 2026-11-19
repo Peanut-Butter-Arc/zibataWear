@@ -4,26 +4,30 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import {
+  Check,
   CheckCircle2,
+  Copy,
+  KeyRound,
+  Lock,
   MapPin,
   MessageCircle,
   ShieldCheck,
   ShoppingBag,
 } from "lucide-react";
-import { formatMxn } from "@/core/constants/zibata";
+import { formatMxn, PLATFORM_FEE_PERCENT } from "@/core/constants/zibata";
 import type { OrderStatus, OrderWithDetails } from "@/core/types/domain";
 import { useToast } from "@/components/providers/ToastProvider";
 
 function formatOrderStatusLabel(status: OrderStatus): string {
   switch (status) {
     case "paid":
-      return "Pagada con Stripe";
+      return "En custodia · Esperando entrega";
     case "active_rental":
-      return "Renta activa";
+      return "Renta activa · Fondos liberados";
     case "demo_paid":
-      return "Confirmada (Sandbox)";
+      return "En custodia (Sandbox)";
     case "completed":
-      return "Completada";
+      return "Completada · Depósito liberado";
     case "cancelled":
       return "Cancelada";
     case "refunded":
@@ -43,6 +47,7 @@ function ExitoContent() {
   const [order, setOrder] = useState<OrderWithDetails | null>(null);
   const [loading, setLoading] = useState(Boolean(orderId));
   const [openingChat, setOpeningChat] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   useEffect(() => {
     if (!orderId) return;
@@ -81,6 +86,17 @@ function ExitoContent() {
     };
   }, [orderId, sessionId]);
 
+  const handleCopyPin = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(true);
+      showToast("Código de entrega copiado", "success");
+      setTimeout(() => setCopiedCode(false), 1800);
+    } catch {
+      showToast("No pudimos copiar automáticamente.", "error");
+    }
+  };
+
   const handleOpenChat = async () => {
     if (!order?.listing_id) return;
     setOpeningChat(true);
@@ -117,11 +133,41 @@ function ExitoContent() {
         </span>
 
         <h1 className="mt-4 text-2xl font-semibold tracking-tight text-zinc-950">
-          ¡Orden confirmada en zibataWear!
+          ¡Pago en custodia confirmado!
         </h1>
         <p className="mt-1.5 text-sm text-zinc-600">
-          Ya puedes coordinar la hora exacta de entrega en Zibatá directo por chat.
+          Tu dinero está protegido en zibataWear y se depositará al vendedor solo cuando le entregues el código tras recibir la prenda.
         </p>
+
+        {order?.handover_code && order.payout_status === "held_in_escrow" && (
+          <div className="mt-6 rounded-2xl border border-emerald-200 bg-zinc-950 p-5 text-left text-white shadow-md">
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                <KeyRound className="h-4 w-4" />
+                Tu código de entrega de 6 dígitos
+              </span>
+              <button
+                type="button"
+                onClick={() => handleCopyPin(order.handover_code!)}
+                className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-white/20"
+              >
+                {copiedCode ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                {copiedCode ? "Copiado" : "Copiar"}
+              </button>
+            </div>
+            <p className="tabular-nums mt-3 text-center font-mono text-3xl font-bold tracking-[0.28em] text-white">
+              {order.handover_code.slice(0, 3)} · {order.handover_code.slice(3)}
+            </p>
+            <p className="mt-3 flex items-start gap-1.5 text-xs leading-relaxed text-zinc-300">
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+              No compartas este código por chat antes de ver la prenda en persona.
+            </p>
+          </div>
+        )}
 
         {order && (
           <div className="mt-6 space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-5 text-left text-sm">
@@ -140,7 +186,7 @@ function ExitoContent() {
               </span>
             </div>
             <div className="flex justify-between gap-4">
-              <span className="text-zinc-500">Estado de pago</span>
+              <span className="text-zinc-500">Estado de custodia</span>
               <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
                 {formatOrderStatusLabel(order.status)}
               </span>
@@ -150,6 +196,12 @@ function ExitoContent() {
               <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
                 <MapPin className="h-3.5 w-3.5" />
                 {order.meetup_zone}
+              </span>
+            </div>
+            <div className="flex justify-between gap-4 text-xs text-zinc-500">
+              <span>Comisión y custodia zibataWear ({PLATFORM_FEE_PERCENT}%)</span>
+              <span className="tabular-nums font-medium text-zinc-700">
+                {formatMxn(order.service_fee_mxn)}
               </span>
             </div>
             <div className="flex justify-between border-t border-zinc-200 pt-2.5 text-base font-bold text-zinc-950">
@@ -166,8 +218,8 @@ function ExitoContent() {
           </p>
           <ul className="mt-2 space-y-1 text-emerald-800">
             <li>• Reúnete en áreas públicas del campus o plazas de Zibatá de día.</li>
-            <li>• Revisa talla, cierres y estado físico al momento de recibir.</li>
-            <li>• En rentas, recuerda la fecha acordada para liberar tu fianza.</li>
+            <li>• Revisa talla, cierres y estado físico antes de dar tu código de 6 dígitos.</li>
+            <li>• En rentas, recuerda la fecha acordada para devolver y liberar tu fianza.</li>
           </ul>
         </div>
 

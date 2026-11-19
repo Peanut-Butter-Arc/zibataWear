@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { formatMxn } from "@/core/constants/zibata";
+import { formatMxn, PLATFORM_FEE_PERCENT } from "@/core/constants/zibata";
 import type { OrderWithDetails } from "@/core/types/domain";
 import { useToast } from "@/components/providers/ToastProvider";
 
@@ -171,7 +171,7 @@ function SandboxContent() {
               </div>
             )}
             <div className="flex justify-between text-zinc-600">
-              <span>Protección Zibatá (5%)</span>
+              <span>Comisión y Protección zibataWear ({PLATFORM_FEE_PERCENT}%)</span>
               <span className="tabular-nums font-medium text-zinc-900">
                 {formatMxn(order.service_fee_mxn)}
               </span>

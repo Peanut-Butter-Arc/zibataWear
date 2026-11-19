@@ -8,11 +8,12 @@ import {
   ArrowLeft,
   BadgeCheck,
   Calendar,
+  KeyRound,
   Lock,
   MapPin,
   MessageCircle,
   Repeat,
-  ShieldCheck,
+  Share2,
   ShoppingBag,
   Sparkles,
   Star,
@@ -21,6 +22,7 @@ import {
   CATEGORY_MAP,
   CONDITION_MAP,
   formatMxn,
+  PLATFORM_FEE_PERCENT,
   PLATFORM_FEE_RATE,
   ZIBATA_MEETUP_ZONES,
 } from "@/core/constants/zibata";
@@ -182,15 +184,40 @@ export function ListingDetailClient({ listing }: { listing: ListingWithSeller })
     }
   };
 
+  const handleShare = async () => {
+    try {
+      const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+      if (navigator.share && shareUrl) {
+        await navigator.share({ title: listing.title, url: shareUrl });
+      } else if (shareUrl) {
+        await navigator.clipboard.writeText(shareUrl);
+        showToast("Enlace copiado para compartir", "success");
+      }
+    } catch {
+      // User dismissed share sheet
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 pb-20 pt-6 sm:px-6 lg:px-8">
-      <Link
-        href="/"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-zinc-600 transition hover:text-zinc-950"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Volver al catálogo
-      </Link>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-600 transition hover:text-zinc-950"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Volver al catálogo
+        </Link>
+
+        <button
+          type="button"
+          onClick={handleShare}
+          className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-300 hover:text-zinc-950"
+        >
+          <Share2 className="h-3.5 w-3.5" />
+          Compartir
+        </button>
+      </div>
 
       <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
         {/* Left: Photo Gallery + Garment Story */}
@@ -471,7 +498,7 @@ export function ListingDetailClient({ listing }: { listing: ListingWithSeller })
               )}
 
               <div className="flex justify-between text-zinc-600">
-                <span>Protección Zibatá (5%)</span>
+                <span>Comisión y Protección zibataWear ({PLATFORM_FEE_PERCENT}%)</span>
                 <span className="tabular-nums font-medium text-zinc-900">
                   {formatMxn(pricingBreakdown.fee)}
                 </span>
@@ -532,10 +559,15 @@ export function ListingDetailClient({ listing }: { listing: ListingWithSeller })
               )}
             </div>
 
-            <p className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-zinc-500">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-              Tu pago queda protegido hasta confirmar entrega en {meetupZone}
-            </p>
+            <div className="mt-4 rounded-2xl border border-emerald-200/80 bg-emerald-50/60 p-3.5 text-xs text-emerald-950">
+              <p className="flex items-center gap-1.5 font-semibold text-emerald-900">
+                <KeyRound className="h-3.5 w-3.5 text-emerald-600" />
+                Custodia segura con código de 6 dígitos
+              </p>
+              <p className="mt-1 leading-relaxed text-emerald-800">
+                Tu pago se retiene en zibataWear y <strong>solo se deposita al vendedor</strong> cuando confirmes el código de entrega en {meetupZone}.
+              </p>
+            </div>
           </div>
 
           {/* Seller Card */}

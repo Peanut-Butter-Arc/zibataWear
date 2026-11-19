@@ -12,7 +12,9 @@ import {
   ShoppingBag,
   Sparkles,
   User as UserIcon,
+  Wallet,
 } from "lucide-react";
+import { formatMxn } from "@/core/constants/zibata";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { cn } from "@/lib/utils";
 
@@ -169,6 +171,19 @@ export function Navbar() {
                     >
                       <UserIcon className="h-4 w-4 text-zinc-500" />
                       Mi cuenta y perfil
+                    </Link>
+                    <Link
+                      href="/cuenta?tab=billetera"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-950"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <Wallet className="h-4 w-4 text-emerald-600" />
+                        Billetera y custodia
+                      </span>
+                      <span className="tabular-nums rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                        {formatMxn(profile?.wallet_balance_mxn ?? 0)}
+                      </span>
                     </Link>
                     <Link
                       href="/cuenta?tab=ordenes"

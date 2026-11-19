@@ -53,6 +53,10 @@ export async function PATCH(request: Request) {
   if (parsed.data.major !== undefined) updates.major = parsed.data.major;
   if (parsed.data.campus_zone !== undefined) updates.campus_zone = parsed.data.campus_zone;
   if (parsed.data.bio !== undefined) updates.bio = parsed.data.bio;
+  if (parsed.data.payout_clabe !== undefined) {
+    updates.payout_clabe = parsed.data.payout_clabe ? parsed.data.payout_clabe : null;
+  }
+  if (parsed.data.payout_bank !== undefined) updates.payout_bank = parsed.data.payout_bank;
 
   const { data, error } = await supabase
     .from("profiles")

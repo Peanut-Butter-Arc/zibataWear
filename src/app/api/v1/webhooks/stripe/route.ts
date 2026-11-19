@@ -42,7 +42,7 @@ export async function POST(request: Request) {
           typeof session.payment_intent === "string"
             ? session.payment_intent
             : session.payment_intent?.id ?? null,
-        nextOrderStatus: orderType === "rent" ? "active_rental" : "paid",
+        nextOrderStatus: "paid",
         nextListingStatus: orderType === "rent" ? "rented" : "sold",
       });
 

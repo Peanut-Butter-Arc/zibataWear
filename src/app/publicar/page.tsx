@@ -10,6 +10,7 @@ import {
   ImagePlus,
   Loader2,
   MapPin,
+  ShieldCheck,
   Sparkles,
   TrendingUp,
   Wand2,
@@ -19,6 +20,7 @@ import {
   CATEGORIES,
   CONDITIONS,
   formatMxn,
+  PLATFORM_FEE_PERCENT,
   POPULAR_BRANDS,
   SIZES_BY_CATEGORY,
   ZIBATA_MEETUP_ZONES,
@@ -97,6 +99,7 @@ function PublishStudioForm({ initialDraft }: { initialDraft: DraftState }) {
 
   const [form, setForm] = useState<DraftState>(initialDraft);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const updateForm = (updater: Partial<DraftState> | ((prev: DraftState) => DraftState)) => {
@@ -158,8 +161,7 @@ function PublishStudioForm({ initialDraft }: { initialDraft: DraftState }) {
     showToast("Título y descripción sugeridos aplicados", "success");
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  const uploadFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     if (!user) {
@@ -201,8 +203,29 @@ function PublishStudioForm({ initialDraft }: { initialDraft: DraftState }) {
       showToast("Error subiendo imagen.", "error");
     } finally {
       setUploadingImage(false);
-      e.target.value = "";
     }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    await uploadFiles(e.target.files);
+    e.target.value = "";
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    await uploadFiles(e.dataTransfer.files);
+  };
+
+  const promoteToCover = (idx: number) => {
+    if (idx === 0) return;
+    updateForm((prev) => {
+      const next = [...prev.images];
+      const [picked] = next.splice(idx, 1);
+      if (!picked) return prev;
+      return { ...prev, images: [picked, ...next] };
+    });
+    showToast("Foto principal actualizada", "success");
   };
 
   const removeImage = (idx: number) => {
@@ -311,7 +334,20 @@ function PublishStudioForm({ initialDraft }: { initialDraft: DraftState }) {
       <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-12 lg:items-start">
         <div className="space-y-6 lg:col-span-7">
           {/* Photos */}
-          <section className="rounded-3xl border border-zinc-200 bg-white p-6">
+          <section
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={handleDrop}
+            className={cn(
+              "rounded-3xl border bg-white p-6 transition",
+              dragActive
+                ? "border-emerald-500 ring-2 ring-emerald-500/20"
+                : "border-zinc-200"
+            )}
+          >
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold text-zinc-950">
                 1. Fotos de la prenda
@@ -321,7 +357,7 @@ function PublishStudioForm({ initialDraft }: { initialDraft: DraftState }) {
               </span>
             </div>
             <p className="mt-1 text-xs text-zinc-500">
-              Sube entre 1 y 6 fotos nítidas con buena luz natural (máx. 5 MB c/u).
+              Arrastra o sube entre 1 y 6 fotos nítidas con buena luz natural (máx. 5 MB c/u).
             </p>
 
             <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4">
@@ -345,10 +381,18 @@ function PublishStudioForm({ initialDraft }: { initialDraft: DraftState }) {
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
-                  {idx === 0 && (
-                    <span className="absolute bottom-1.5 left-1.5 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-zinc-950">
+                  {idx === 0 ? (
+                    <span className="absolute bottom-1.5 left-1.5 rounded-full bg-white/95 px-2 py-0.5 text-[10px] font-semibold text-zinc-950">
                       Portada
                     </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => promoteToCover(idx)}
+                      className="absolute bottom-1.5 left-1.5 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-medium text-white opacity-90 transition hover:bg-black sm:opacity-0 sm:group-hover:opacity-100"
+                    >
+                      Hacer portada
+                    </button>
                   )}
                 </div>
               ))}
@@ -735,6 +779,16 @@ function PublishStudioForm({ initialDraft }: { initialDraft: DraftState }) {
                 </li>
               ))}
             </ul>
+
+            <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-3.5 text-xs text-emerald-100">
+              <p className="flex items-center gap-1.5 font-semibold text-emerald-300">
+                <ShieldCheck className="h-4 w-4" />
+                Pago liberado al confirmar código de entrega
+              </p>
+              <p className="mt-1 leading-relaxed text-emerald-100/80">
+                Recibes el 100% de tu precio publicado cuando el comprador te dé su PIN de 6 dígitos en persona. El comprador cubre la comisión de {PLATFORM_FEE_PERCENT}% y custodia zibataWear.
+              </p>
+            </div>
           </div>
 
           <div className="rounded-3xl border border-zinc-200 bg-white p-5">

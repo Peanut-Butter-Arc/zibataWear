@@ -46,6 +46,13 @@ export const updateProfileSchema = z.object({
   major: z.string().trim().max(120).optional(),
   campus_zone: z.enum(ZIBATA_MEETUP_ZONES).optional(),
   bio: z.string().trim().max(280, "Máximo 280 caracteres.").optional(),
+  payout_clabe: z
+    .string()
+    .trim()
+    .regex(/^\d{18}$/, "La CLABE debe tener 18 dígitos.")
+    .optional()
+    .or(z.literal("")),
+  payout_bank: z.string().trim().max(60, "Máximo 60 caracteres.").optional(),
 });
 
 export const pricingRequestSchema = z.object({
@@ -144,4 +151,28 @@ export const sendMessageSchema = z.object({
     .trim()
     .min(1, "Escribe un mensaje.")
     .max(2000, "Máximo 2000 caracteres."),
+});
+
+export const confirmHandoverSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "El código de entrega debe tener 6 dígitos."),
+});
+
+export const confirmReturnSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "El código de devolución debe tener 6 dígitos.")
+    .optional(),
+});
+
+export const withdrawWalletSchema = z.object({
+  amountMxn: z.number().int().min(50, "Retiro mínimo de $50 MXN."),
+  clabe: z
+    .string()
+    .trim()
+    .regex(/^\d{18}$/, "Ingresa una CLABE válida de 18 dígitos."),
+  bank: z.string().trim().min(2, "Indica tu banco.").max(60),
 });

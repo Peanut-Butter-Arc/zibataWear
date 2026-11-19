@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { finalizeStripeOrder } from "@/lib/stripe/finalize-order";
 import {
   createApiSupabaseClient,
   handleCorsOptions,
@@ -32,33 +33,56 @@ export async function POST(request: Request) {
     return jsonResponse({ error: "Datos inválidos." }, { status: 400, request });
   }
 
-  const nextStatus = parsed.data.action === "cancel" ? "cancelled" : "demo_paid";
-
-  const { data, error } = await supabase
+  const { data: existing, error: fetchErr } = await supabase
     .from("orders")
-    .update({ status: nextStatus })
+    .select("*")
     .eq("id", parsed.data.orderId)
     .eq("buyer_id", user.id)
     .eq("payment_provider", "stripe_sandbox_demo")
     .eq("status", "pending")
-    .select("*")
     .maybeSingle();
 
-  if (error || !data) {
+  if (fetchErr || !existing) {
     return jsonResponse(
       { error: "No pudimos actualizar la orden demo (puede estar ya procesada)." },
       { status: 404, request }
     );
   }
 
+  const isCancel = parsed.data.action === "cancel";
+  const result = await finalizeStripeOrder({
+    orderId: existing.id,
+    listingId: existing.listing_id,
+    stripeSessionId: `demo_${existing.id}`,
+    paymentIntentId: null,
+    nextOrderStatus: isCancel ? "cancelled" : "demo_paid",
+    nextListingStatus: isCancel
+      ? null
+      : existing.order_type === "rent"
+        ? "rented"
+        : "sold",
+  });
+
+  if (!result.ok) {
+    return jsonResponse(
+      { error: result.error ?? "No se pudo confirmar la orden en custodia." },
+      { status: 500, request }
+    );
+  }
+
+  const { data: updated } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("id", existing.id)
+    .maybeSingle();
+
   return jsonResponse(
     {
       ok: true,
-      order: data,
-      redirectUrl:
-        nextStatus === "demo_paid"
-          ? `/pago/exito?orderId=${data.id}&mode=demo`
-          : `/prenda/${data.listing_id}`,
+      order: updated ?? existing,
+      redirectUrl: isCancel
+        ? `/prenda/${existing.listing_id}`
+        : `/pago/exito?orderId=${existing.id}&mode=demo`,
     },
     { request }
   );

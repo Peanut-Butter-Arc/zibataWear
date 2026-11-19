@@ -13,6 +13,13 @@ export type OrderStatus =
   | "cancelled"
   | "refunded";
 
+export type PayoutStatus =
+  | "unpaid"
+  | "held_in_escrow"
+  | "released"
+  | "transferred_stripe"
+  | "refunded";
+
 export interface Profile {
   id: string;
   full_name: string;
@@ -27,6 +34,12 @@ export interface Profile {
   is_demo: boolean;
   rating: number;
   reviews_count: number;
+  wallet_balance_mxn?: number;
+  wallet_pending_mxn?: number;
+  stripe_connect_account_id?: string | null;
+  stripe_connect_onboarded?: boolean;
+  payout_clabe?: string | null;
+  payout_bank?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -107,6 +120,14 @@ export interface Order {
   stripe_session_id: string | null;
   stripe_payment_intent_id: string | null;
   payment_provider: "stripe" | "stripe_sandbox_demo";
+  platform_fee_rate?: number;
+  seller_payout_mxn?: number;
+  handover_attempts?: number;
+  handover_confirmed_at?: string | null;
+  return_confirmed_at?: string | null;
+  payout_status?: PayoutStatus;
+  payout_released_at?: string | null;
+  stripe_transfer_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -115,6 +136,25 @@ export interface OrderWithDetails extends Order {
   listing: Pick<Listing, "id" | "title" | "brand" | "images" | "size" | "meetup_zone"> | null;
   buyer?: Profile | null;
   seller?: Profile | null;
+  handover_code?: string | null;
+  return_code?: string | null;
+}
+
+export interface WalletTransaction {
+  id: string;
+  user_id: string;
+  order_id: string | null;
+  type:
+    | "escrow_hold"
+    | "payout_release"
+    | "stripe_transfer"
+    | "withdrawal_request"
+    | "deposit_refund";
+  amount_mxn: number;
+  status: "pending" | "completed" | "failed";
+  description: string;
+  stripe_transfer_id: string | null;
+  created_at: string;
 }
 
 export interface PriceRecommendationInput {
