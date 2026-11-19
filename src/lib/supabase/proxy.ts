@@ -4,6 +4,17 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function updateSession(request: NextRequest) {
   if (
     request.nextUrl.pathname === "/" &&
+    (request.nextUrl.searchParams.has("error_code") ||
+      request.nextUrl.searchParams.get("error") === "access_denied")
+  ) {
+    const authErrorUrl = request.nextUrl.clone();
+    authErrorUrl.pathname = "/auth";
+    authErrorUrl.search = "?error=link_invalido";
+    return NextResponse.redirect(authErrorUrl);
+  }
+
+  if (
+    request.nextUrl.pathname === "/" &&
     (request.nextUrl.searchParams.has("code") ||
       request.nextUrl.searchParams.has("token_hash"))
   ) {

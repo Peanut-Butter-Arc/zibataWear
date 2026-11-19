@@ -22,7 +22,7 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-type AuthStep = "email" | "otp" | "onboarding";
+type AuthStep = "email" | "otp" | "forgot" | "reset-password" | "onboarding";
 type AuthMethod = "otp" | "password";
 type PasswordMode = "signin" | "signup";
 
@@ -58,6 +58,8 @@ function AuthFlowContent() {
   const nextPath =
     rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/cuenta";
   const urlErrorParam = searchParams.get("error");
+  const initialStep: AuthStep =
+    searchParams.get("mode") === "forgot" ? "forgot" : "email";
   const urlErrorMessage =
     urlErrorParam === "link_invalido"
       ? "El enlace de acceso expiró o ya fue utilizado. Solicita un nuevo código."
@@ -67,20 +69,27 @@ function AuthFlowContent() {
   const { user, profile, refreshProfile } = useAuth();
   const { showToast } = useToast();
 
-  const [step, setStep] = useState<AuthStep>("email");
+  const [step, setStep] = useState<AuthStep>(initialStep);
   const [authMethod, setAuthMethod] = useState<AuthMethod>("otp");
   const [passwordMode, setPasswordMode] = useState<PasswordMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [otpType, setOtpType] = useState<"email" | "signup">("email");
+  const [otpType, setOtpType] = useState<"email" | "signup" | "recovery">("email");
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [urlErrorDismissed, setUrlErrorDismissed] = useState(false);
   const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Recovery reset-password fields
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [savingNewPassword, setSavingNewPassword] = useState(false);
 
   // Onboarding fields
   const [fullName, setFullName] = useState("");
@@ -95,8 +104,14 @@ function AuthFlowContent() {
   const isUni = isUniversityEmail(email);
 
   const needsOnboarding = Boolean(user && profile && !profile.full_name?.trim());
-  const effectiveStep: AuthStep = needsOnboarding ? "onboarding" : step;
-  const displayedError = errorMsg ?? urlErrorMessage;
+  const effectiveStep: AuthStep =
+    step === "reset-password"
+      ? "reset-password"
+      : needsOnboarding
+        ? "onboarding"
+        : step;
+  const displayedError =
+    errorMsg ?? (!urlErrorDismissed ? urlErrorMessage : null);
 
   useEffect(() => {
     if (user && profile?.full_name?.trim() && step === "email") {
@@ -112,7 +127,7 @@ function AuthFlowContent() {
     return () => clearInterval(timer);
   }, [cooldown]);
 
-  const handleSendCode = async (e?: React.FormEvent) => {
+  const handleSendRecovery = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes("@")) {
@@ -121,6 +136,56 @@ function AuthFlowContent() {
     }
 
     setErrorMsg(null);
+    setUrlErrorDismissed(true);
+    setIsRateLimited(false);
+    setSending(true);
+    try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/auth/nueva-contrasena")}`,
+      });
+
+      if (error) {
+        if (
+          error.status === 429 ||
+          /rate limit|over_email_send_rate_limit/i.test(error.message)
+        ) {
+          setIsRateLimited(true);
+        }
+        setErrorMsg(formatAuthError(error.message, error.status));
+        return;
+      }
+
+      setOtpType("recovery");
+      setStep("otp");
+      setCooldown(60);
+      showToast(
+        `Te enviamos instrucciones de recuperación a ${cleanEmail}`,
+        "success"
+      );
+      setTimeout(() => inputRefs.current[0]?.focus(), 100);
+    } catch {
+      setErrorMsg("No pudimos enviar el correo de recuperación. Intenta de nuevo.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSendCode = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (otpType === "recovery" && step === "otp") {
+      await handleSendRecovery();
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      setErrorMsg("Ingresa un correo electrónico válido.");
+      return;
+    }
+
+    setErrorMsg(null);
+    setUrlErrorDismissed(true);
     setIsRateLimited(false);
     setSending(true);
     try {
@@ -199,6 +264,7 @@ function AuthFlowContent() {
     }
 
     setErrorMsg(null);
+    setUrlErrorDismissed(true);
     setIsRateLimited(false);
     setSending(true);
     try {
@@ -284,14 +350,32 @@ function AuthFlowContent() {
     setErrorMsg(null);
     setVerifying(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: email.trim().toLowerCase(),
+      const cleanEmail = email.trim().toLowerCase();
+      let { data, error } = await supabase.auth.verifyOtp({
+        email: cleanEmail,
         token: codeValue,
         type: otpType,
       });
 
+      if (error && otpType === "signup") {
+        const fallback = await supabase.auth.verifyOtp({
+          email: cleanEmail,
+          token: codeValue,
+          type: "email",
+        });
+        data = fallback.data;
+        error = fallback.error;
+      }
+
       if (error) {
         setErrorMsg("Código incorrecto o expirado. Verifica e intenta de nuevo.");
+        return;
+      }
+
+      if (otpType === "recovery") {
+        showToast("Código de recuperación verificado", "success");
+        setDigits(["", "", "", "", "", ""]);
+        setStep("reset-password");
         return;
       }
 
@@ -310,6 +394,45 @@ function AuthFlowContent() {
       setErrorMsg("Error verificando el código.");
     } finally {
       setVerifying(false);
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      setErrorMsg("La nueva contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setErrorMsg("Las contraseñas no coinciden.");
+      return;
+    }
+
+    setErrorMsg(null);
+    setSavingNewPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (error) {
+        setErrorMsg(error.message || "No se pudo actualizar tu contraseña.");
+        return;
+      }
+
+      await refreshProfile();
+      showToast("¡Contraseña actualizada!", "success");
+
+      const profileRes = await fetch("/api/v1/profile");
+      const profileJson = await profileRes.json().catch(() => ({}));
+      if (!profileJson?.profile?.full_name?.trim()) {
+        setStep("onboarding");
+      } else {
+        router.replace(nextPath);
+      }
+    } catch {
+      setErrorMsg("Error de red al guardar tu nueva contraseña.");
+    } finally {
+      setSavingNewPassword(false);
     }
   };
 
@@ -490,6 +613,7 @@ function AuthFlowContent() {
                   onClick={() => {
                     setAuthMethod("otp");
                     setErrorMsg(null);
+                    setUrlErrorDismissed(true);
                     setIsRateLimited(false);
                   }}
                   className={cn(
@@ -509,6 +633,7 @@ function AuthFlowContent() {
                   onClick={() => {
                     setAuthMethod("password");
                     setErrorMsg(null);
+                    setUrlErrorDismissed(true);
                     setIsRateLimited(false);
                   }}
                   className={cn(
@@ -673,9 +798,25 @@ function AuthFlowContent() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-zinc-700">
-                      Contraseña {passwordMode === "signup" ? "(mínimo 8 caracteres)" : ""}
-                    </label>
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <label className="block text-xs font-semibold text-zinc-700">
+                        Contraseña {passwordMode === "signup" ? "(mínimo 8 caracteres)" : ""}
+                      </label>
+                      {passwordMode === "signin" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setErrorMsg(null);
+                            setUrlErrorDismissed(true);
+                            setIsRateLimited(false);
+                            setStep("forgot");
+                          }}
+                          className="text-xs font-semibold text-zinc-700 underline hover:text-zinc-950"
+                        >
+                          ¿Olvidaste tu contraseña?
+                        </button>
+                      )}
+                    </div>
                     <div className="relative">
                       <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                       <input
@@ -764,13 +905,74 @@ function AuthFlowContent() {
             </div>
           )}
 
+          {effectiveStep === "forgot" && (
+            <form onSubmit={handleSendRecovery} className="space-y-5">
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep("email");
+                    setAuthMethod("password");
+                    setPasswordMode("signin");
+                    setErrorMsg(null);
+                    setUrlErrorDismissed(true);
+                  }}
+                  className="text-xs font-medium text-zinc-500 hover:text-zinc-950"
+                >
+                  ← Volver a iniciar sesión
+                </button>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
+                  Recupera tu contraseña
+                </h2>
+                <p className="mt-1 text-sm text-zinc-600">
+                  Te enviaremos un código o enlace seguro para crear una contraseña nueva.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-zinc-700">
+                  Correo registrado
+                </label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="tu.nombre@anahuac.mx"
+                    className="h-12 w-full rounded-2xl border border-zinc-200 bg-zinc-50 pl-10 pr-4 text-sm text-zinc-950 outline-none transition focus:border-zinc-950 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              {displayedError && (
+                <p className="rounded-xl bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-700">
+                  {displayedError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={sending}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-zinc-950 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60"
+              >
+                {sending
+                  ? "Enviando recuperación..."
+                  : "Enviar código / enlace de recuperación"}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </form>
+          )}
+
           {effectiveStep === "otp" && (
             <div className="space-y-6">
               <div>
                 <button
                   type="button"
                   onClick={() => {
-                    setStep("email");
+                    setStep(otpType === "recovery" ? "forgot" : "email");
                     setDigits(["", "", "", "", "", ""]);
                     setErrorMsg(null);
                   }}
@@ -779,11 +981,16 @@ function AuthFlowContent() {
                   ← Cambiar correo ({email})
                 </button>
                 <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
-                  Escribe tu código de 6 dígitos
+                  {otpType === "recovery"
+                    ? "Código de recuperación de 6 dígitos"
+                    : "Escribe tu código de 6 dígitos"}
                 </h2>
                 <p className="mt-1 text-sm text-zinc-600">
-                  Enviamos un código de verificación a{" "}
+                  Enviamos un correo de verificación a{" "}
                   <strong className="text-zinc-950">{email}</strong>.
+                  {otpType === "recovery"
+                    ? " Si tu correo trae un enlace, haz clic en él o ingresa el código de 6 dígitos aquí."
+                    : ""}
                 </p>
               </div>
 
@@ -837,6 +1044,88 @@ function AuthFlowContent() {
                 </button>
               </div>
             </div>
+          )}
+
+          {effectiveStep === "reset-password" && (
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+              <div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Recuperación verificada
+                </span>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">
+                  Crea tu nueva contraseña
+                </h2>
+                <p className="mt-1 text-sm text-zinc-600">
+                  Guarda una nueva contraseña segura para <strong className="text-zinc-950">{email}</strong>.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-zinc-700">
+                  Nueva contraseña (mínimo 8 caracteres)
+                </label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="h-12 w-full rounded-2xl border border-zinc-200 bg-zinc-50 pl-10 pr-11 text-sm text-zinc-950 outline-none transition focus:border-zinc-950 focus:bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword((prev) => !prev)}
+                    aria-label={showNewPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-zinc-400 transition hover:text-zinc-800"
+                  >
+                    {showNewPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-zinc-700">
+                  Confirmar nueva contraseña
+                </label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    placeholder="Repite tu contraseña"
+                    className="h-12 w-full rounded-2xl border border-zinc-200 bg-zinc-50 pl-10 pr-4 text-sm text-zinc-950 outline-none transition focus:border-zinc-950 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              {errorMsg && (
+                <p className="rounded-xl bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-700">
+                  {errorMsg}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={savingNewPassword}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-zinc-950 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-60"
+              >
+                {savingNewPassword ? "Guardando..." : "Guardar nueva contraseña"}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </form>
           )}
 
           {effectiveStep === "onboarding" && (
