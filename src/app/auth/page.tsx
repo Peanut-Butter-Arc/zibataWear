@@ -21,12 +21,30 @@ import { cn } from "@/lib/utils";
 
 type AuthStep = "email" | "otp" | "onboarding";
 
+function formatAuthError(message: string, status?: number): string {
+  if (status === 429 || /rate limit|over_email_send_rate_limit/i.test(message)) {
+    return "Se alcanzó el límite temporal de correos de Supabase (2/hora con el servidor gratuito por defecto). Configura Custom SMTP en Supabase para subir el límite o intenta de nuevo más tarde.";
+  }
+  if (/not authorized|email_address_not_authorized/i.test(message)) {
+    return "El servidor de correos interno de Supabase solo permite correos del equipo. Configura Custom SMTP en Supabase para enviar a cualquier correo universitario.";
+  }
+  if (/security purposes|seconds|wait/i.test(message)) {
+    return "Por seguridad, espera unos segundos antes de solicitar otro código para este correo.";
+  }
+  return message;
+}
+
 function AuthFlowContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawNext = searchParams.get("next") ?? "/cuenta";
   const nextPath =
     rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/cuenta";
+  const urlErrorParam = searchParams.get("error");
+  const urlErrorMessage =
+    urlErrorParam === "link_invalido"
+      ? "El enlace de acceso expiró o ya fue utilizado. Solicita un nuevo código."
+      : null;
 
   const supabase = useMemo(() => createClient(), []);
   const { user, profile, refreshProfile } = useAuth();
@@ -52,6 +70,7 @@ function AuthFlowContent() {
 
   const needsOnboarding = Boolean(user && profile && !profile.full_name?.trim());
   const effectiveStep: AuthStep = needsOnboarding ? "onboarding" : step;
+  const displayedError = errorMsg ?? urlErrorMessage;
 
   useEffect(() => {
     if (user && profile?.full_name?.trim() && step === "email") {
@@ -88,7 +107,7 @@ function AuthFlowContent() {
       });
 
       if (error) {
-        setErrorMsg(error.message);
+        setErrorMsg(formatAuthError(error.message, error.status));
         return;
       }
 
@@ -308,9 +327,9 @@ function AuthFlowContent() {
                 )}
               </div>
 
-              {errorMsg && (
+              {displayedError && (
                 <p className="rounded-xl bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-700">
-                  {errorMsg}
+                  {displayedError}
                 </p>
               )}
 
