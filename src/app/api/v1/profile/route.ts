@@ -2,8 +2,11 @@ import { updateProfileSchema } from "@/core/schemas/validation";
 import {
   createApiSupabaseClient,
   ensureUserProfile,
+  getOwnerProfileWithWallet,
+  getOwnerSellerWallet,
   handleCorsOptions,
   jsonResponse,
+  PUBLIC_PROFILE_SELECT,
 } from "@/lib/supabase/api-auth";
 
 export async function OPTIONS(request: Request) {
@@ -16,7 +19,7 @@ export async function GET(request: Request) {
     return jsonResponse({ profile: null }, { status: 200, request });
   }
 
-  const profile = await ensureUserProfile(supabase, user);
+  const profile = await getOwnerProfileWithWallet(supabase, user);
   return jsonResponse({ profile, email: user.email ?? null }, { request });
 }
 
@@ -53,16 +56,12 @@ export async function PATCH(request: Request) {
   if (parsed.data.major !== undefined) updates.major = parsed.data.major;
   if (parsed.data.campus_zone !== undefined) updates.campus_zone = parsed.data.campus_zone;
   if (parsed.data.bio !== undefined) updates.bio = parsed.data.bio;
-  if (parsed.data.payout_clabe !== undefined) {
-    updates.payout_clabe = parsed.data.payout_clabe ? parsed.data.payout_clabe : null;
-  }
-  if (parsed.data.payout_bank !== undefined) updates.payout_bank = parsed.data.payout_bank;
 
   const { data, error } = await supabase
     .from("profiles")
     .update(updates)
     .eq("id", user.id)
-    .select("*")
+    .select(PUBLIC_PROFILE_SELECT)
     .single();
 
   if (error) {
@@ -72,5 +71,6 @@ export async function PATCH(request: Request) {
     return jsonResponse({ error: "No se pudo actualizar el perfil." }, { status: 500, request });
   }
 
-  return jsonResponse({ profile: data }, { request });
+  const wallet = await getOwnerSellerWallet(supabase, user.id);
+  return jsonResponse({ profile: { ...data, ...wallet } }, { request });
 }

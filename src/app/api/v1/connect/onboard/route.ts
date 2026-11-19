@@ -2,7 +2,7 @@ import { saveStripeConnectAccountInDb } from "@/lib/stripe/finalize-order";
 import { getStripeClient } from "@/lib/stripe/server";
 import {
   createApiSupabaseClient,
-  ensureUserProfile,
+  getOwnerProfileWithWallet,
   handleCorsOptions,
   jsonResponse,
 } from "@/lib/supabase/api-auth";
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const profile = await ensureUserProfile(supabase, user);
+  const profile = await getOwnerProfileWithWallet(supabase, user);
   let accountId: string | null = profile?.stripe_connect_account_id ?? null;
 
   try {

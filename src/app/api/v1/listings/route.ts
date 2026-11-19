@@ -5,6 +5,7 @@ import {
   ensureUserProfile,
   handleCorsOptions,
   jsonResponse,
+  PUBLIC_PROFILE_SELECT,
 } from "@/lib/supabase/api-auth";
 
 export async function OPTIONS(request: Request) {
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from("listings")
-    .select("*, seller:profiles!listings_seller_id_fkey(*)");
+    .select(`*, seller:profiles!listings_seller_id_fkey(${PUBLIC_PROFILE_SELECT})`);
 
   if (mine && user) {
     query = query.eq("seller_id", user.id);
@@ -144,7 +145,7 @@ export async function POST(request: Request) {
       tags: payload.tags,
       status: "active",
     })
-    .select("*, seller:profiles!listings_seller_id_fkey(*)")
+    .select(`*, seller:profiles!listings_seller_id_fkey(${PUBLIC_PROFILE_SELECT})`)
     .single();
 
   if (error) {

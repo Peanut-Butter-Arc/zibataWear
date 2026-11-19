@@ -3,6 +3,7 @@ import {
   createApiSupabaseClient,
   handleCorsOptions,
   jsonResponse,
+  PUBLIC_PROFILE_SELECT,
 } from "@/lib/supabase/api-auth";
 
 export async function OPTIONS(request: Request) {
@@ -18,7 +19,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("listings")
-    .select("*, seller:profiles!listings_seller_id_fkey(*)")
+    .select(`*, seller:profiles!listings_seller_id_fkey(${PUBLIC_PROFILE_SELECT})`)
     .eq("id", id)
     .maybeSingle();
 
@@ -63,7 +64,7 @@ export async function PATCH(
     .update(parsed.data)
     .eq("id", id)
     .eq("seller_id", user.id)
-    .select("*, seller:profiles!listings_seller_id_fkey(*)")
+    .select(`*, seller:profiles!listings_seller_id_fkey(${PUBLIC_PROFILE_SELECT})`)
     .maybeSingle();
 
   if (error) {

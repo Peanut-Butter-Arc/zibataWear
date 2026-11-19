@@ -4,6 +4,7 @@ import {
   ensureUserProfile,
   handleCorsOptions,
   jsonResponse,
+  PUBLIC_PROFILE_SELECT,
 } from "@/lib/supabase/api-auth";
 
 const CONVERSATION_SELECT = `
@@ -11,8 +12,8 @@ const CONVERSATION_SELECT = `
   listing:listings!conversations_listing_id_fkey(
     id, title, images, sale_price_mxn, rent_price_per_day_mxn, listing_mode, meetup_zone, status
   ),
-  buyer:profiles!conversations_buyer_id_fkey(*),
-  seller:profiles!conversations_seller_id_fkey(*)
+  buyer:profiles!conversations_buyer_id_fkey(${PUBLIC_PROFILE_SELECT}),
+  seller:profiles!conversations_seller_id_fkey(${PUBLIC_PROFILE_SELECT})
 `;
 
 export async function OPTIONS(request: Request) {

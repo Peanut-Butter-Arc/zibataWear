@@ -1,7 +1,7 @@
 import { PLATFORM_FEE_PERCENT } from "@/core/constants/zibata";
 import {
   createApiSupabaseClient,
-  ensureUserProfile,
+  getOwnerProfileWithWallet,
   handleCorsOptions,
   jsonResponse,
 } from "@/lib/supabase/api-auth";
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   }
 
   const [profile, { data: transactions }] = await Promise.all([
-    ensureUserProfile(supabase, user),
+    getOwnerProfileWithWallet(supabase, user),
     supabase
       .from("wallet_transactions")
       .select("*")

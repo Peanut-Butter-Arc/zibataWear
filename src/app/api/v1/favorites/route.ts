@@ -4,6 +4,7 @@ import {
   ensureUserProfile,
   handleCorsOptions,
   jsonResponse,
+  PUBLIC_PROFILE_SELECT,
 } from "@/lib/supabase/api-auth";
 
 const toggleFavoriteSchema = z.object({
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from("favorites")
-    .select("listing_id, listing:listings!favorites_listing_id_fkey(*, seller:profiles!listings_seller_id_fkey(*))")
+    .select(`listing_id, listing:listings!favorites_listing_id_fkey(*, seller:profiles!listings_seller_id_fkey(${PUBLIC_PROFILE_SELECT}))`)
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 

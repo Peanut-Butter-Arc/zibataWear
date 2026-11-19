@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { cacheLife } from "next/cache";
 import { Suspense } from "react";
 import type { ListingWithSeller } from "@/core/types/domain";
+import { PUBLIC_PROFILE_SELECT } from "@/lib/supabase/api-auth";
 import { MarketplaceExplorer } from "@/components/marketplace/MarketplaceExplorer";
 
 async function getInitialListings(): Promise<ListingWithSeller[]> {
@@ -15,7 +16,7 @@ async function getInitialListings(): Promise<ListingWithSeller[]> {
 
   const { data } = await supabase
     .from("listings")
-    .select("*, seller:profiles!listings_seller_id_fkey(*)")
+    .select(`*, seller:profiles!listings_seller_id_fkey(${PUBLIC_PROFILE_SELECT})`)
     .eq("status", "active")
     .order("is_featured", { ascending: false })
     .order("created_at", { ascending: false })

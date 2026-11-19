@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache, Suspense } from "react";
 import type { ListingWithSeller } from "@/core/types/domain";
+import { PUBLIC_PROFILE_SELECT } from "@/lib/supabase/api-auth";
 import { ListingDetailClient } from "@/components/marketplace/ListingDetailClient";
 
 const getListingById = cache(async (id: string): Promise<ListingWithSeller | null> => {
@@ -13,7 +14,7 @@ const getListingById = cache(async (id: string): Promise<ListingWithSeller | nul
 
   const { data } = await supabase
     .from("listings")
-    .select("*, seller:profiles!listings_seller_id_fkey(*)")
+    .select(`*, seller:profiles!listings_seller_id_fkey(${PUBLIC_PROFILE_SELECT})`)
     .eq("id", id)
     .maybeSingle();
 

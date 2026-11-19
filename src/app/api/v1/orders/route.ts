@@ -2,13 +2,14 @@ import {
   createApiSupabaseClient,
   handleCorsOptions,
   jsonResponse,
+  PUBLIC_PROFILE_SELECT,
 } from "@/lib/supabase/api-auth";
 
 const ORDER_SELECT = `
   *,
   listing:listings!orders_listing_id_fkey(id, title, brand, images, size, meetup_zone),
-  buyer:profiles!orders_buyer_id_fkey(*),
-  seller:profiles!orders_seller_id_fkey(*)
+  buyer:profiles!orders_buyer_id_fkey(${PUBLIC_PROFILE_SELECT}),
+  seller:profiles!orders_seller_id_fkey(${PUBLIC_PROFILE_SELECT})
 `;
 
 export async function OPTIONS(request: Request) {
