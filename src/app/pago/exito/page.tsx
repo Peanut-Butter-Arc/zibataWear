@@ -11,13 +11,33 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import { formatMxn } from "@/core/constants/zibata";
-import type { OrderWithDetails } from "@/core/types/domain";
+import type { OrderStatus, OrderWithDetails } from "@/core/types/domain";
 import { useToast } from "@/components/providers/ToastProvider";
+
+function formatOrderStatusLabel(status: OrderStatus): string {
+  switch (status) {
+    case "paid":
+      return "Pagada con Stripe";
+    case "active_rental":
+      return "Renta activa";
+    case "demo_paid":
+      return "Confirmada (Sandbox)";
+    case "completed":
+      return "Completada";
+    case "cancelled":
+      return "Cancelada";
+    case "refunded":
+      return "Reembolsada";
+    default:
+      return "Procesando confirmación";
+  }
+}
 
 function ExitoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId");
+  const sessionId = searchParams.get("session_id");
   const { showToast } = useToast();
 
   const [order, setOrder] = useState<OrderWithDetails | null>(null);
@@ -27,18 +47,39 @@ function ExitoContent() {
   useEffect(() => {
     if (!orderId) return;
     let active = true;
-    fetch(`/api/v1/orders?id=${encodeURIComponent(orderId)}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (active && data?.order) setOrder(data.order);
-      })
-      .finally(() => {
+
+    async function loadOrder() {
+      try {
+        if (sessionId) {
+          const verifyRes = await fetch("/api/v1/checkout/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId, sessionId }),
+          });
+          if (verifyRes.ok) {
+            const verifyData = await verifyRes.json();
+            if (active && verifyData?.order) {
+              setOrder(verifyData.order);
+              return;
+            }
+          }
+        }
+
+        const res = await fetch(`/api/v1/orders?id=${encodeURIComponent(orderId ?? "")}`);
+        const data = res.ok ? await res.json() : null;
+        if (active && data?.order) {
+          setOrder(data.order);
+        }
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    }
+
+    loadOrder();
     return () => {
       active = false;
     };
-  }, [orderId]);
+  }, [orderId, sessionId]);
 
   const handleOpenChat = async () => {
     if (!order?.listing_id) return;
@@ -84,13 +125,13 @@ function ExitoContent() {
 
         {order && (
           <div className="mt-6 space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-5 text-left text-sm">
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-4">
               <span className="text-zinc-500">Prenda</span>
-              <span className="font-semibold text-zinc-950">
+              <span className="text-right font-semibold text-zinc-950">
                 {order.listing?.title ?? "Prenda Zibatá"}
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-4">
               <span className="text-zinc-500">Modalidad</span>
               <span className="font-medium text-zinc-900">
                 {order.order_type === "rent"
@@ -98,7 +139,13 @@ function ExitoContent() {
                   : "Compra directa"}
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-4">
+              <span className="text-zinc-500">Estado de pago</span>
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                {formatOrderStatusLabel(order.status)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-4">
               <span className="text-zinc-500">Punto seguro</span>
               <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
                 <MapPin className="h-3.5 w-3.5" />

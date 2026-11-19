@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { finalizeStripeOrder } from "@/lib/stripe/finalize-order";
 import { getStripeClient, getStripeWebhookSecret } from "@/lib/stripe/server";
 
 export async function POST(request: Request) {
@@ -27,19 +27,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!serviceRoleKey || !supabaseUrl) {
-    return NextResponse.json(
-      { error: "Falta SUPABASE_SERVICE_ROLE_KEY en el servidor." },
-      { status: 500 }
-    );
-  }
-
-  const adminSupabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     const orderId = session.metadata?.order_id;
@@ -47,35 +34,44 @@ export async function POST(request: Request) {
     const orderType = session.metadata?.order_type;
 
     if (orderId) {
-      await adminSupabase
-        .from("orders")
-        .update({
-          status: orderType === "rent" ? "active_rental" : "paid",
-          stripe_session_id: session.id,
-          stripe_payment_intent_id:
-            typeof session.payment_intent === "string"
-              ? session.payment_intent
-              : session.payment_intent?.id ?? null,
-        })
-        .eq("id", orderId);
-    }
+      const result = await finalizeStripeOrder({
+        orderId,
+        listingId: listingId ?? null,
+        stripeSessionId: session.id,
+        paymentIntentId:
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : session.payment_intent?.id ?? null,
+        nextOrderStatus: orderType === "rent" ? "active_rental" : "paid",
+        nextListingStatus: orderType === "rent" ? "rented" : "sold",
+      });
 
-    if (listingId) {
-      await adminSupabase
-        .from("listings")
-        .update({
-          status: orderType === "rent" ? "rented" : "sold",
-        })
-        .eq("id", listingId);
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.error ?? "No se pudo finalizar la orden." },
+          { status: 500 }
+        );
+      }
     }
   } else if (event.type === "checkout.session.expired") {
     const session = event.data.object;
     const orderId = session.metadata?.order_id;
     if (orderId) {
-      await adminSupabase
-        .from("orders")
-        .update({ status: "cancelled" })
-        .eq("id", orderId);
+      const result = await finalizeStripeOrder({
+        orderId,
+        listingId: session.metadata?.listing_id ?? null,
+        stripeSessionId: session.id,
+        paymentIntentId: null,
+        nextOrderStatus: "cancelled",
+        nextListingStatus: null,
+      });
+
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.error ?? "No se pudo cancelar la orden." },
+          { status: 500 }
+        );
+      }
     }
   }
 

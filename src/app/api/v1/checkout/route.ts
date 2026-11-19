@@ -159,7 +159,7 @@ export async function POST(request: Request) {
               description: `Entrega segura en ${chosenMeetupZone}`,
               images: listing.images?.[0] ? [listing.images[0]] : undefined,
             },
-            unit_amount: subtotalMxn * 100,
+            unit_amount: Math.round(subtotalMxn * 100),
           },
           quantity: 1,
         },
@@ -173,7 +173,7 @@ export async function POST(request: Request) {
               name: "Fianza de garantía reembolsable",
               description: "Se devuelve al entregar la prenda en buen estado",
             },
-            unit_amount: depositMxn * 100,
+            unit_amount: Math.round(depositMxn * 100),
           },
           quantity: 1,
         });
@@ -187,7 +187,7 @@ export async function POST(request: Request) {
               name: "Protección Zibatá (5%)",
               description: "Resguardo del pago hasta tu entrega en campus",
             },
-            unit_amount: serviceFeeMxn * 100,
+            unit_amount: Math.round(serviceFeeMxn * 100),
           },
           quantity: 1,
         });

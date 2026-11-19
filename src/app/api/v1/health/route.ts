@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { jsonResponse, handleCorsOptions } from "@/lib/supabase/api-auth";
-import { isStripeConfigured } from "@/lib/stripe/server";
+import { getStripeMode, isStripeConfigured } from "@/lib/stripe/server";
 
 export async function OPTIONS(request: Request) {
   return handleCorsOptions(request);
@@ -14,6 +14,7 @@ export async function GET(request: Request) {
       app: "zibataWear",
       zone: "Zibatá, Querétaro",
       stripeConfigured: isStripeConfigured(),
+      stripeMode: getStripeMode(),
       timestamp: new Date().toISOString(),
     },
     { request }

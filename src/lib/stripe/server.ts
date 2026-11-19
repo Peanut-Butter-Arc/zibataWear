@@ -7,6 +7,14 @@ export function isStripeConfigured(): boolean {
   return Boolean(key && (key.startsWith("sk_test_") || key.startsWith("sk_live_") || key.startsWith("rk_")));
 }
 
+export function getStripeMode(): "live" | "test" | "sandbox_demo" {
+  const key = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!key) return "sandbox_demo";
+  if (key.startsWith("sk_live_") || key.startsWith("rk_live_")) return "live";
+  if (key.startsWith("sk_test_") || key.startsWith("rk_test_")) return "test";
+  return "sandbox_demo";
+}
+
 export function getStripeClient(): Stripe | null {
   const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
   if (!secretKey) return null;
