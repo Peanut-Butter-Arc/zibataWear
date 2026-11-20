@@ -29,7 +29,7 @@ interface OrderEscrowCardProps {
 const ORDER_STATUS_META: Record<string, { label: string; tone: string }> = {
   pending: { label: "Pendiente de pago", tone: "bg-amber-50 text-amber-700" },
   paid: { label: "En custodia · Esperando entrega", tone: "bg-emerald-50 text-emerald-700" },
-  demo_paid: { label: "En custodia (Sandbox)", tone: "bg-emerald-50 text-emerald-700" },
+  demo_paid: { label: "En custodia · Esperando entrega", tone: "bg-emerald-50 text-emerald-700" },
   active_rental: { label: "Renta activa · Fondos liberados", tone: "bg-blue-50 text-blue-700" },
   completed: { label: "Completada · Depósito liberado", tone: "bg-zinc-900 text-white" },
   cancelled: { label: "Cancelada", tone: "bg-rose-50 text-rose-700" },
@@ -378,16 +378,6 @@ export function OrderEscrowCard({
           </span>
 
           <div className="flex gap-2">
-            {role === "buyer" &&
-              order.status === "pending" &&
-              order.payment_provider === "stripe_sandbox_demo" && (
-                <Link
-                  href={`/pago/sandbox?orderId=${order.id}`}
-                  className="rounded-full bg-zinc-950 px-3 py-1 text-xs font-semibold text-white"
-                >
-                  Completar pago demo
-                </Link>
-              )}
             <Link
               href={`/pago/exito?orderId=${order.id}`}
               className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"

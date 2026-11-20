@@ -6,7 +6,7 @@ export interface FinalizeStripeOrderParams {
   listingId?: string | null;
   stripeSessionId: string;
   paymentIntentId: string | null;
-  nextOrderStatus: "paid" | "demo_paid" | "active_rental" | "cancelled";
+  nextOrderStatus: "paid" | "active_rental" | "cancelled";
   nextListingStatus: "sold" | "rented" | null;
 }
 
@@ -90,37 +90,11 @@ async function invokeEscrowOperation(
 
 export async function finalizeStripeOrder({
   orderId,
-  listingId,
   stripeSessionId,
   paymentIntentId,
   nextOrderStatus,
   nextListingStatus,
 }: FinalizeStripeOrderParams): Promise<{ ok: boolean; error?: string }> {
-  // Demo fallback if Stripe webhook secret isn't configured locally
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  const webhookSecret = getStripeWebhookSecret();
-
-  if (!webhookSecret && serviceRoleKey && supabaseUrl) {
-    const admin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { error } = await admin
-      .from("orders")
-      .update({
-        status: nextOrderStatus,
-        payout_status: nextOrderStatus === "cancelled" ? "unpaid" : "held_in_escrow",
-        stripe_session_id: stripeSessionId,
-        stripe_payment_intent_id: paymentIntentId,
-      })
-      .eq("id", orderId);
-    if (error) return { ok: false, error: error.message };
-    if (listingId && nextListingStatus && nextOrderStatus !== "cancelled") {
-      await admin.from("listings").update({ status: nextListingStatus }).eq("id", listingId);
-    }
-    return { ok: true };
-  }
-
   const result = await invokeEscrowOperation(
     "finalize",
     "finalize_stripe_order",

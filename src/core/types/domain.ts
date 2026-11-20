@@ -192,5 +192,5 @@ export interface CheckoutPayload {
 export interface CheckoutResult {
   order: Order;
   checkoutUrl: string;
-  mode: "stripe_live_or_test" | "stripe_sandbox_demo";
+  mode: "stripe_live" | "stripe_test";
 }

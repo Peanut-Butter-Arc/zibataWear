@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_RATE } from "@/core/constants/zibata";
 import { checkoutRequestSchema } from "@/core/schemas/validation";
-import { getStripeClient } from "@/lib/stripe/server";
+import { getStripeClient, getStripeMode } from "@/lib/stripe/server";
 import {
   createApiSupabaseClient,
   ensureUserProfile,
@@ -125,7 +125,13 @@ export async function POST(request: Request) {
   const chosenMeetupZone = meetupZone ?? listing.meetup_zone;
 
   const stripe = getStripeClient();
-  const provider = stripe ? "stripe" : "stripe_sandbox_demo";
+  if (!stripe) {
+    return jsonResponse(
+      { error: "La pasarela de pagos Stripe no está configurada en el servidor." },
+      { status: 503, request }
+    );
+  }
+
   const orderId = randomUUID();
 
   const originHeader = request.headers.get("origin");
@@ -133,93 +139,99 @@ export async function POST(request: Request) {
     originHeader || process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
   const appOrigin = requestOrigin.replace(/\/+$/, "");
 
-  let stripeSessionId: string | null = null;
-  let stripeSessionUrl: string | null = null;
+  let stripeSessionId: string;
+  let stripeSessionUrl: string;
 
-  if (stripe) {
-    try {
-      const lineItems: Array<{
+  try {
+    const lineItems: Array<{
+      price_data: {
+        currency: "mxn";
+        product_data: { name: string; description?: string; images?: string[] };
+        unit_amount: number;
+      };
+      quantity: number;
+    }> = [
+      {
         price_data: {
-          currency: "mxn";
-          product_data: { name: string; description?: string; images?: string[] };
-          unit_amount: number;
-        };
-        quantity: number;
-      }> = [
-        {
-          price_data: {
-            currency: "mxn",
-            product_data: {
-              name:
-                orderType === "buy"
-                  ? `${listing.title} (Compra)`
-                  : `${listing.title} (Renta ${rentalDays} ${
-                      rentalDays === 1 ? "día" : "días"
-                    })`,
-              description: `Entrega segura en ${chosenMeetupZone}`,
-              images: listing.images?.[0] ? [listing.images[0]] : undefined,
-            },
-            unit_amount: Math.round(subtotalMxn * 100),
+          currency: "mxn",
+          product_data: {
+            name:
+              orderType === "buy"
+                ? `${listing.title} (Compra)`
+                : `${listing.title} (Renta ${rentalDays} ${
+                    rentalDays === 1 ? "día" : "días"
+                  })`,
+            description: `Entrega segura en ${chosenMeetupZone}`,
+            images: listing.images?.[0] ? [listing.images[0]] : undefined,
           },
-          quantity: 1,
+          unit_amount: Math.round(subtotalMxn * 100),
         },
-      ];
+        quantity: 1,
+      },
+    ];
 
-      if (depositMxn > 0) {
-        lineItems.push({
-          price_data: {
-            currency: "mxn",
-            product_data: {
-              name: "Fianza de garantía reembolsable",
-              description: "Se devuelve al entregar la prenda en buen estado",
-            },
-            unit_amount: Math.round(depositMxn * 100),
+    if (depositMxn > 0) {
+      lineItems.push({
+        price_data: {
+          currency: "mxn",
+          product_data: {
+            name: "Fianza de garantía reembolsable",
+            description: "Se devuelve al entregar la prenda en buen estado",
           },
-          quantity: 1,
-        });
-      }
-
-      if (serviceFeeMxn > 0) {
-        lineItems.push({
-          price_data: {
-            currency: "mxn",
-            product_data: {
-              name: `Comisión y Protección zibataWear (${PLATFORM_FEE_PERCENT}%)`,
-              description: "Pago en custodia — se libera al vendedor al confirmar el código de entrega",
-            },
-            unit_amount: Math.round(serviceFeeMxn * 100),
-          },
-          quantity: 1,
-        });
-      }
-
-      const session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        customer_email: user.email ?? undefined,
-        line_items: lineItems,
-        payment_intent_data: {
-          transfer_group: orderId,
+          unit_amount: Math.round(depositMxn * 100),
         },
-        metadata: {
-          order_id: orderId,
-          listing_id: listing.id,
-          buyer_id: user.id,
-          seller_id: listing.seller_id,
-          order_type: orderType,
-        },
-        success_url: `${appOrigin}/pago/exito?orderId=${orderId}&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${appOrigin}/prenda/${listing.id}?checkout=cancelled`,
+        quantity: 1,
       });
+    }
 
-      stripeSessionId = session.id;
-      stripeSessionUrl = session.url;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Error creando sesión de Stripe";
+    if (serviceFeeMxn > 0) {
+      lineItems.push({
+        price_data: {
+          currency: "mxn",
+          product_data: {
+            name: `Comisión y Protección zibataWear (${PLATFORM_FEE_PERCENT}%)`,
+            description:
+              "Pago en custodia — se libera al vendedor al confirmar el código de entrega",
+          },
+          unit_amount: Math.round(serviceFeeMxn * 100),
+        },
+        quantity: 1,
+      });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: user.email ?? undefined,
+      line_items: lineItems,
+      payment_intent_data: {
+        transfer_group: orderId,
+      },
+      metadata: {
+        order_id: orderId,
+        listing_id: listing.id,
+        buyer_id: user.id,
+        seller_id: listing.seller_id,
+        order_type: orderType,
+      },
+      success_url: `${appOrigin}/pago/exito?orderId=${orderId}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appOrigin}/prenda/${listing.id}?checkout=cancelled`,
+    });
+
+    if (!session.url) {
       return jsonResponse(
-        { error: `Error con Stripe Checkout: ${msg}` },
+        { error: "Stripe no devolvió una URL de pago válida." },
         { status: 502, request }
       );
     }
+
+    stripeSessionId = session.id;
+    stripeSessionUrl = session.url;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Error creando sesión de Stripe";
+    return jsonResponse(
+      { error: `Error con Stripe Checkout: ${msg}` },
+      { status: 502, request }
+    );
   }
 
   const { data: order, error: orderErr } = await supabase
@@ -243,7 +255,7 @@ export async function POST(request: Request) {
       payout_status: "unpaid",
       meetup_zone: chosenMeetupZone,
       stripe_session_id: stripeSessionId,
-      payment_provider: provider,
+      payment_provider: "stripe",
     })
     .select("*")
     .single();
@@ -255,22 +267,11 @@ export async function POST(request: Request) {
     );
   }
 
-  if (stripeSessionUrl) {
-    return jsonResponse(
-      {
-        order,
-        checkoutUrl: stripeSessionUrl,
-        mode: "stripe_live_or_test",
-      },
-      { status: 201, request }
-    );
-  }
-
   return jsonResponse(
     {
       order,
-      checkoutUrl: `/pago/sandbox?orderId=${order.id}`,
-      mode: "stripe_sandbox_demo",
+      checkoutUrl: stripeSessionUrl,
+      mode: getStripeMode() === "live" ? "stripe_live" : "stripe_test",
     },
     { status: 201, request }
   );

@@ -26,15 +26,27 @@ type AuthStep = "email" | "otp" | "forgot" | "reset-password" | "onboarding";
 type AuthMethod = "otp" | "password";
 type PasswordMode = "signin" | "signup";
 
+function isCooldownError(message: string): boolean {
+  return /security purposes|after \d+ second|wait/i.test(message);
+}
+
+function isGlobalRateLimitError(message: string, status?: number): boolean {
+  if (isCooldownError(message)) return false;
+  return status === 429 || /rate limit|over_email_send_rate_limit/i.test(message);
+}
+
 function formatAuthError(message: string, status?: number): string {
+  if (isCooldownError(message)) {
+    const sec = message.match(/after\s+(\d+)\s+second/i)?.[1];
+    return sec
+      ? `Por seguridad, espera ${sec} segundos antes de solicitar otro correo.`
+      : "Por seguridad, espera unos segundos antes de solicitar otro correo.";
+  }
   if (status === 429 || /rate limit|over_email_send_rate_limit/i.test(message)) {
     return "Se alcanzó el límite temporal de correos de Supabase (2/hora con el servidor gratuito por defecto). Configura Custom SMTP en Supabase para subir el límite o intenta de nuevo más tarde.";
   }
   if (/not authorized|email_address_not_authorized/i.test(message)) {
     return "El servidor de correos interno de Supabase solo permite correos del equipo. Configura Custom SMTP en Supabase para enviar a cualquier correo universitario.";
-  }
-  if (/security purposes|seconds|wait/i.test(message)) {
-    return "Por seguridad, espera unos segundos antes de solicitar otro código para este correo.";
   }
   if (/invalid login credentials/i.test(message)) {
     return "Correo o contraseña incorrectos. Si antes entrabas solo con código, inicia con código y configura tu contraseña en Mi cuenta → Perfil.";
@@ -146,10 +158,7 @@ function AuthFlowContent() {
       });
 
       if (error) {
-        if (
-          error.status === 429 ||
-          /rate limit|over_email_send_rate_limit/i.test(error.message)
-        ) {
+        if (isGlobalRateLimitError(error.message, error.status)) {
           setIsRateLimited(true);
         }
         setErrorMsg(formatAuthError(error.message, error.status));
@@ -201,10 +210,7 @@ function AuthFlowContent() {
           },
         });
         if (error) {
-          if (
-            error.status === 429 ||
-            /rate limit|over_email_send_rate_limit/i.test(error.message)
-          ) {
+          if (isGlobalRateLimitError(error.message, error.status)) {
             setIsRateLimited(true);
           }
           setErrorMsg(formatAuthError(error.message, error.status));
@@ -221,10 +227,7 @@ function AuthFlowContent() {
         });
 
         if (error) {
-          if (
-            error.status === 429 ||
-            /rate limit|over_email_send_rate_limit/i.test(error.message)
-          ) {
+          if (isGlobalRateLimitError(error.message, error.status)) {
             setIsRateLimited(true);
           }
           setErrorMsg(formatAuthError(error.message, error.status));
@@ -302,10 +305,7 @@ function AuthFlowContent() {
       });
 
       if (error) {
-        if (
-          error.status === 429 ||
-          /rate limit|over_email_send_rate_limit/i.test(error.message)
-        ) {
+        if (isGlobalRateLimitError(error.message, error.status)) {
           setIsRateLimited(true);
         }
         setErrorMsg(formatAuthError(error.message, error.status));

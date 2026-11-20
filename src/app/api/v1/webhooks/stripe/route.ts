@@ -27,33 +27,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  if (event.type === "checkout.session.completed") {
+  if (
+    event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded"
+  ) {
     const session = event.data.object;
-    const orderId = session.metadata?.order_id;
-    const listingId = session.metadata?.listing_id;
-    const orderType = session.metadata?.order_type;
+    const isPaid =
+      event.type === "checkout.session.async_payment_succeeded" ||
+      session.payment_status === "paid";
 
-    if (orderId) {
-      const result = await finalizeStripeOrder({
-        orderId,
-        listingId: listingId ?? null,
-        stripeSessionId: session.id,
-        paymentIntentId:
-          typeof session.payment_intent === "string"
-            ? session.payment_intent
-            : session.payment_intent?.id ?? null,
-        nextOrderStatus: "paid",
-        nextListingStatus: orderType === "rent" ? "rented" : "sold",
-      });
+    if (isPaid) {
+      const orderId = session.metadata?.order_id;
+      const listingId = session.metadata?.listing_id;
+      const orderType = session.metadata?.order_type;
 
-      if (!result.ok) {
-        return NextResponse.json(
-          { error: result.error ?? "No se pudo finalizar la orden." },
-          { status: 500 }
-        );
+      if (orderId) {
+        const result = await finalizeStripeOrder({
+          orderId,
+          listingId: listingId ?? null,
+          stripeSessionId: session.id,
+          paymentIntentId:
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent?.id ?? null,
+          nextOrderStatus: "paid",
+          nextListingStatus: orderType === "rent" ? "rented" : "sold",
+        });
+
+        if (!result.ok) {
+          return NextResponse.json(
+            { error: result.error ?? "No se pudo finalizar la orden." },
+            { status: 500 }
+          );
+        }
       }
     }
-  } else if (event.type === "checkout.session.expired") {
+  } else if (
+    event.type === "checkout.session.expired" ||
+    event.type === "checkout.session.async_payment_failed"
+  ) {
     const session = event.data.object;
     const orderId = session.metadata?.order_id;
     if (orderId) {

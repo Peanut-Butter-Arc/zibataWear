@@ -1,7 +1,11 @@
 import { connection } from "next/server";
 import { PLATFORM_FEE_PERCENT } from "@/core/constants/zibata";
 import { jsonResponse, handleCorsOptions } from "@/lib/supabase/api-auth";
-import { getStripeMode, isStripeConfigured } from "@/lib/stripe/server";
+import {
+  getStripeMode,
+  isStripeConfigured,
+  isStripeLiveMode,
+} from "@/lib/stripe/server";
 
 export async function OPTIONS(request: Request) {
   return handleCorsOptions(request);
@@ -16,6 +20,7 @@ export async function GET(request: Request) {
       zone: "Zibatá, Querétaro",
       stripeConfigured: isStripeConfigured(),
       stripeMode: getStripeMode(),
+      livePaymentsEnabled: isStripeLiveMode(),
       platformFeePercent: PLATFORM_FEE_PERCENT,
       timestamp: new Date().toISOString(),
     },

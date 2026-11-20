@@ -25,7 +25,7 @@ function formatOrderStatusLabel(status: OrderStatus): string {
     case "active_rental":
       return "Renta activa · Fondos liberados";
     case "demo_paid":
-      return "En custodia (Sandbox)";
+      return "En custodia · Esperando entrega";
     case "completed":
       return "Completada · Depósito liberado";
     case "cancelled":
