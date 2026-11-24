@@ -1,4 +1,4 @@
-import { PLATFORM_FEE_PERCENT } from "@/core/constants/zibata";
+import { PLATFORM_FEE_MIN_MXN, PLATFORM_FEE_PERCENT } from "@/core/constants/zibata";
 import {
   createApiSupabaseClient,
   getOwnerProfileWithWallet,
@@ -29,6 +29,7 @@ export async function GET(request: Request) {
   return jsonResponse(
     {
       platformFeePercent: PLATFORM_FEE_PERCENT,
+      platformFeeMinMxn: PLATFORM_FEE_MIN_MXN,
       wallet: {
         balanceMxn: profile?.wallet_balance_mxn ?? 0,
         pendingMxn: profile?.wallet_pending_mxn ?? 0,

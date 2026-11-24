@@ -92,11 +92,46 @@ export async function POST(
     payoutMxn > 0
   ) {
     try {
+      let sourceChargeId: string | undefined;
+      let paymentIntentId = result.stripe_payment_intent_id ?? null;
+
+      if (!paymentIntentId && result.stripe_session_id) {
+        try {
+          const session = await stripe.checkout.sessions.retrieve(
+            result.stripe_session_id
+          );
+          paymentIntentId =
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent?.id ?? null;
+        } catch {
+          // Non-fatal; fallback transfer without source_transaction
+        }
+      }
+
+      if (paymentIntentId) {
+        try {
+          const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
+            expand: ["latest_charge"],
+          });
+          if (
+            pi.latest_charge &&
+            typeof pi.latest_charge === "object" &&
+            pi.latest_charge.status === "succeeded"
+          ) {
+            sourceChargeId = pi.latest_charge.id;
+          }
+        } catch {
+          // Non-fatal; fallback transfer without source_transaction
+        }
+      }
+
       const transfer = await stripe.transfers.create({
         amount: Math.round(payoutMxn * 100),
         currency: "mxn",
         destination: result.stripe_connect_account_id,
         transfer_group: id,
+        ...(sourceChargeId ? { source_transaction: sourceChargeId } : {}),
         description: `Pago liberado zibataWear tras confirmar código de entrega #${id.slice(0, 8)}`,
       });
       stripeTransferId = transfer.id;

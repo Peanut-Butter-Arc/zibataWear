@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_RATE } from "@/core/constants/zibata";
+import {
+  calculateBuyerServiceFeeMxn,
+  PLATFORM_FEE_MIN_MXN,
+  PLATFORM_FEE_PERCENT,
+  PLATFORM_FEE_RATE,
+} from "@/core/constants/zibata";
 import { checkoutRequestSchema } from "@/core/schemas/validation";
 import { getStripeClient, getStripeMode } from "@/lib/stripe/server";
 import {
@@ -120,7 +125,9 @@ export async function POST(request: Request) {
     depositMxn = listing.security_deposit_mxn ?? 0;
   }
 
-  const serviceFeeMxn = Math.round(subtotalMxn * PLATFORM_FEE_RATE);
+  const serviceFeeMxn = calculateBuyerServiceFeeMxn(subtotalMxn);
+  const isMinFeeApplied =
+    serviceFeeMxn > Math.round(subtotalMxn * PLATFORM_FEE_RATE);
   const totalMxn = subtotalMxn + depositMxn + serviceFeeMxn;
   const chosenMeetupZone = meetupZone ?? listing.meetup_zone;
 
@@ -189,7 +196,7 @@ export async function POST(request: Request) {
         price_data: {
           currency: "mxn",
           product_data: {
-            name: `Comisión y Protección zibataWear (${PLATFORM_FEE_PERCENT}%)`,
+            name: `Comisión y Protección zibataWear (${PLATFORM_FEE_PERCENT}%${isMinFeeApplied ? ` · mín. $${PLATFORM_FEE_MIN_MXN}` : ""})`,
             description:
               "Pago en custodia — se libera al vendedor al confirmar el código de entrega",
           },

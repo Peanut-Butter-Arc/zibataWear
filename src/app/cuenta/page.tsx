@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import {
   formatMxn,
+  PLATFORM_FEE_MIN_MXN,
   PLATFORM_FEE_PERCENT,
   ZIBATA_MEETUP_ZONES,
 } from "@/core/constants/zibata";
@@ -914,7 +915,7 @@ function CuentaContent() {
                     Billetera y custodia zibataWear
                   </span>
                   <span className="font-mono text-xs text-zinc-400">
-                    Comisión plataforma: {PLATFORM_FEE_PERCENT}%
+                    Comisión plataforma: {PLATFORM_FEE_PERCENT}% (mín. ${PLATFORM_FEE_MIN_MXN})
                   </span>
                 </div>
 
@@ -938,7 +939,7 @@ function CuentaContent() {
                 </div>
 
                 <p className="mt-5 border-t border-white/10 pt-4 text-xs leading-relaxed text-zinc-400">
-                  Recibes el 100% del precio de tu prenda justo cuando el comprador te dé su código de 6 dígitos en Zibatá (el comprador cubre la comisión de {PLATFORM_FEE_PERCENT}% al pagar).
+                  Recibes el 100% del precio de tu prenda justo cuando el comprador te dé su código de 6 dígitos en Zibatá (el comprador cubre la comisión de {PLATFORM_FEE_PERCENT}% o mín. ${PLATFORM_FEE_MIN_MXN} MXN al pagar).
                 </p>
               </div>
 

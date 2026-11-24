@@ -786,7 +786,7 @@ function PublishStudioForm({ initialDraft }: { initialDraft: DraftState }) {
                 Pago liberado al confirmar código de entrega
               </p>
               <p className="mt-1 leading-relaxed text-emerald-100/80">
-                Recibes el 100% de tu precio publicado cuando el comprador te dé su PIN de 6 dígitos en persona. El comprador cubre la comisión de {PLATFORM_FEE_PERCENT}% y custodia zibataWear.
+                Recibes el 100% de tu precio publicado cuando el comprador te dé su PIN de 6 dígitos en persona. El comprador cubre la comisión de {PLATFORM_FEE_PERCENT}% (mín. $15 MXN) y custodia zibataWear.
               </p>
             </div>
           </div>

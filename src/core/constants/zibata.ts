@@ -236,6 +236,15 @@ export const VERIFIED_UNI_DOMAINS = [
 
 export const PLATFORM_FEE_RATE = 0.07;
 export const PLATFORM_FEE_PERCENT = 7;
+export const PLATFORM_FEE_MIN_MXN = 15;
+
+export function calculateBuyerServiceFeeMxn(subtotalMxn: number): number {
+  if (!Number.isFinite(subtotalMxn) || subtotalMxn <= 0) return 0;
+  return Math.max(
+    PLATFORM_FEE_MIN_MXN,
+    Math.round(subtotalMxn * PLATFORM_FEE_RATE)
+  );
+}
 
 export function isUniversityEmail(email: string): boolean {
   const domain = email.trim().toLowerCase().split("@")[1] ?? "";

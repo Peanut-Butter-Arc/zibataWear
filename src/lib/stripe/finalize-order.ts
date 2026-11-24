@@ -21,6 +21,8 @@ interface EscrowActionResponse {
   seller_payout_mxn?: number;
   stripe_connect_account_id?: string | null;
   stripe_connect_onboarded?: boolean;
+  stripe_payment_intent_id?: string | null;
+  stripe_session_id?: string | null;
   remaining_balance_mxn?: number;
   transaction_id?: string;
 }

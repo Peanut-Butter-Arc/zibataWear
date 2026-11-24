@@ -199,7 +199,13 @@ function ExitoContent() {
               </span>
             </div>
             <div className="flex justify-between gap-4 text-xs text-zinc-500">
-              <span>Comisión y custodia zibataWear ({PLATFORM_FEE_PERCENT}%)</span>
+              <span>
+                Comisión y custodia zibataWear ({PLATFORM_FEE_PERCENT}%
+                {order.service_fee_mxn > Math.round(order.subtotal_mxn * 0.07)
+                  ? " · mín."
+                  : ""}
+                )
+              </span>
               <span className="tabular-nums font-medium text-zinc-700">
                 {formatMxn(order.service_fee_mxn)}
               </span>

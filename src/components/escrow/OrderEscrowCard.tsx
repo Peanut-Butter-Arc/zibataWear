@@ -14,7 +14,7 @@ import {
   RotateCcw,
   ShieldCheck,
 } from "lucide-react";
-import { formatMxn, PLATFORM_FEE_PERCENT } from "@/core/constants/zibata";
+import { formatMxn } from "@/core/constants/zibata";
 import type { OrderWithDetails } from "@/core/types/domain";
 import { useToast } from "@/components/providers/ToastProvider";
 import { cn } from "@/lib/utils";
@@ -200,7 +200,7 @@ export function OrderEscrowCard({
                 : isHeld
                   ? "En custodia"
                   : "Por cobrar"
-              : `Incl. ${PLATFORM_FEE_PERCENT}% protección`}
+              : "Incl. protección zibataWear"}
           </p>
         </div>
       </div>
@@ -373,7 +373,7 @@ export function OrderEscrowCard({
       {!compact && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
           <span className="text-[11px] text-zinc-500">
-            Subtotal {formatMxn(order.subtotal_mxn)} · Comisión {PLATFORM_FEE_PERCENT}% ({formatMxn(order.service_fee_mxn)})
+            Subtotal {formatMxn(order.subtotal_mxn)} · Comisión zibataWear ({formatMxn(order.service_fee_mxn)})
             {order.deposit_mxn > 0 ? ` · Fianza ${formatMxn(order.deposit_mxn)}` : ""}
           </span>
 

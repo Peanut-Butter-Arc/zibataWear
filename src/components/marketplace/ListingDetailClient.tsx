@@ -19,9 +19,11 @@ import {
   Star,
 } from "lucide-react";
 import {
+  calculateBuyerServiceFeeMxn,
   CATEGORY_MAP,
   CONDITION_MAP,
   formatMxn,
+  PLATFORM_FEE_MIN_MXN,
   PLATFORM_FEE_PERCENT,
   PLATFORM_FEE_RATE,
   ZIBATA_MEETUP_ZONES,
@@ -84,11 +86,12 @@ export function ListingDetailClient({ listing }: { listing: ListingWithSeller })
   const pricingBreakdown = useMemo(() => {
     if (selectedMode === "buy") {
       const subtotal = listing.sale_price_mxn ?? 0;
-      const fee = Math.round(subtotal * PLATFORM_FEE_RATE);
+      const fee = calculateBuyerServiceFeeMxn(subtotal);
       return {
         subtotal,
         deposit: 0,
         fee,
+        isMinFeeApplied: fee > Math.round(subtotal * PLATFORM_FEE_RATE),
         total: subtotal + fee,
       };
     }
@@ -96,11 +99,12 @@ export function ListingDetailClient({ listing }: { listing: ListingWithSeller })
     const validDays = Math.max(1, rentalDays);
     const subtotal = (listing.rent_price_per_day_mxn ?? 0) * validDays;
     const deposit = listing.security_deposit_mxn ?? 0;
-    const fee = Math.round(subtotal * PLATFORM_FEE_RATE);
+    const fee = calculateBuyerServiceFeeMxn(subtotal);
     return {
       subtotal,
       deposit,
       fee,
+      isMinFeeApplied: fee > Math.round(subtotal * PLATFORM_FEE_RATE),
       total: subtotal + deposit + fee,
     };
   }, [selectedMode, listing, rentalDays]);
@@ -498,7 +502,13 @@ export function ListingDetailClient({ listing }: { listing: ListingWithSeller })
               )}
 
               <div className="flex justify-between text-zinc-600">
-                <span>Comisión y Protección zibataWear ({PLATFORM_FEE_PERCENT}%)</span>
+                <span>
+                  Comisión y Protección zibataWear ({PLATFORM_FEE_PERCENT}%
+                  {pricingBreakdown.isMinFeeApplied
+                    ? ` · mín. $${PLATFORM_FEE_MIN_MXN}`
+                    : ""}
+                  )
+                </span>
                 <span className="tabular-nums font-medium text-zinc-900">
                   {formatMxn(pricingBreakdown.fee)}
                 </span>
